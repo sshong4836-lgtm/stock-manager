@@ -482,6 +482,7 @@
         <span class="badge badge-manual">수동</span>
         <span style="font-size:12px;color:var(--muted)">직접 입력</span>
         <button id="portfolio-fetch-btn" class="btn btn-primary btn-sm no-print" onclick="fetchPortfolioPrices()">🔄 시세 가져오기</button>
+        <button id="portfolio-kiwoom-btn" class="btn btn-ghost btn-sm no-print" onclick="fetchPortfolioKiwoom()">🏦 키움 시세</button>
         <button class="btn btn-orange btn-sm no-print" onclick="exportPortfolioCSV()">📥 CSV</button>
       </div>
     </div>
@@ -870,6 +871,7 @@
     <input type="text" id="w-search" placeholder="종목명 검색…" style="flex:1;max-width:300px" oninput="renderWatchlist()">
     <span id="w-count" style="font-size:12px;color:var(--muted)"></span>
     <button id="watchlist-fetch-btn" class="btn btn-primary btn-sm no-print" onclick="fetchWatchlistPrices()">🔄 전체 시세 가져오기</button>
+    <button id="watchlist-kiwoom-btn" class="btn btn-ghost btn-sm no-print" onclick="fetchWatchlistKiwoom()">🏦 키움 시세</button>
   </div>
   <div class="wc-list" id="w-grid"></div>
 </div>
@@ -1197,6 +1199,68 @@
       </div>
     </div>
   </div>
+
+  <!-- 키움증권 REST API -->
+  <div class="two-col" style="margin-top:0">
+    <div>
+      <div class="card">
+        <div class="card-title">🏦 키움증권 REST API 설정</div>
+        <div class="info-note info-note-orange" style="margin-bottom:16px">
+          키움증권 REST API를 이용해 보유종목·관심종목의 현재가를 직접 조회합니다.<br>
+          App Key / App Secret은 <strong>키움 개발자센터</strong>에서 앱 등록 후 발급받을 수 있습니다.
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr;gap:14px">
+          <div class="form-group">
+            <label>App Key</label>
+            <input type="text" id="kw-appkey" placeholder="발급받은 App Key 입력" style="font-family:monospace;font-size:12px">
+          </div>
+          <div class="form-group">
+            <label>App Secret</label>
+            <input type="password" id="kw-appsecret" placeholder="발급받은 App Secret 입력" style="font-family:monospace;font-size:12px">
+          </div>
+        </div>
+        <div class="row-flex" style="margin-top:16px;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="saveKiwoomSettings()">💾 설정 저장</button>
+          <button class="btn btn-success" id="kw-token-btn" onclick="issueKiwoomToken()">🔑 토큰 발급</button>
+          <button class="btn btn-danger btn-sm" onclick="clearKiwoomSettings()" style="margin-left:auto">설정 삭제</button>
+        </div>
+        <div id="kw-status" style="margin-top:12px;font-size:12px;color:var(--muted);min-height:18px"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">ℹ️ 키움 REST API 설정 방법</div>
+        <div style="font-size:13px;line-height:1.9;color:var(--text)">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:var(--bg3);border-radius:8px;padding:12px">
+              <strong style="color:var(--orange)">① 앱 등록</strong><br>
+              키움증권 개발자센터 접속 → 앱 등록<br>
+              → <strong>App Key</strong>와 <strong>App Secret</strong> 발급
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px">
+              <strong style="color:var(--orange)">② 종목코드 형식</strong><br>
+              포트폴리오·관심종목의 종목코드를<br>
+              <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">005930.KS</code> 형식으로 입력하면<br>
+              키움 API 조회 시 6자리 코드로 자동 변환됩니다.
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px">
+              <strong style="color:var(--orange)">③ 토큰 발급</strong><br>
+              저장 후 <strong>토큰 발급</strong> 버튼 클릭<br>
+              → 24시간 유효 / 만료 시 자동 재발급
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚠️ CORS 주의사항</div>
+        <div class="info-note info-note-orange" style="margin:0;font-size:12px;line-height:1.8">
+          브라우저에서 직접 API 호출 시 CORS 오류가 발생할 수 있습니다.<br>
+          오류 발생 시 <strong>공개 프록시(corsproxy.io)</strong>를 경유합니다.<br>
+          <strong>보안 주의</strong>: 실사용 환경에서는 로컬 프록시 서버 구성을 권장합니다.
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 </div><!-- /content -->
@@ -1253,7 +1317,7 @@ function switchTab(btn, name) {
   if (name === 'daytrade') renderDayTrade();
   if (name === 'futures')  renderFutures();
   if (name === 'etfwatch') renderEtfWatch();
-  if (name === 'settings') loadTelegramSettingsUI();
+  if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -4787,6 +4851,220 @@ async function fetchAllEtfWatchPrices() {
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
   toast(`시세 갱신 완료: ${ok}건 성공${fail ? ', '+fail+'건 실패' : ''}`);
+}
+
+// ══════════════════════════════════════════════════════
+// 키움증권 REST API
+// ══════════════════════════════════════════════════════
+
+const KIWOOM_BASE  = 'https://api.kiwoom.com';
+const KIWOOM_PROXY = 'https://corsproxy.io/?';
+
+let kiwoomSettings = JSON.parse(localStorage.getItem('sm-kiwoom')       || '{}');
+let kiwoomToken    = JSON.parse(localStorage.getItem('sm-kiwoom-token') || '{}');
+
+function loadKiwoomSettingsUI() {
+  const keyEl = document.getElementById('kw-appkey');
+  if (!keyEl) return;
+  if (kiwoomSettings.appkey)    keyEl.value = kiwoomSettings.appkey;
+  if (kiwoomSettings.appsecret) document.getElementById('kw-appsecret').value = kiwoomSettings.appsecret;
+  _updateKiwoomStatus();
+}
+
+function _updateKiwoomStatus() {
+  const el = document.getElementById('kw-status');
+  if (!el) return;
+  if (!kiwoomSettings.appkey) {
+    el.innerHTML = '<span style="color:var(--muted)">⚠️ App Key와 App Secret을 입력하고 저장하세요.</span>';
+    return;
+  }
+  if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) {
+    const exp = new Date(kiwoomToken.expires_at).toLocaleString('ko-KR');
+    el.innerHTML = `<span style="color:var(--green)">✅ 토큰 유효 — 만료: ${exp}</span>`;
+  } else {
+    el.innerHTML = '<span style="color:var(--yellow)">⚠️ 토큰 없음 또는 만료 — 토큰 발급 버튼을 클릭하세요.</span>';
+  }
+}
+
+function saveKiwoomSettings() {
+  const appkey    = document.getElementById('kw-appkey').value.trim();
+  const appsecret = document.getElementById('kw-appsecret').value.trim();
+  if (!appkey || !appsecret) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
+  kiwoomSettings = { appkey, appsecret };
+  localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
+  _updateKiwoomStatus();
+  toast('키움 API 설정이 저장되었습니다.', 'green');
+}
+
+function clearKiwoomSettings() {
+  if (!confirm('키움 API 설정을 삭제할까요?')) return;
+  kiwoomSettings = {}; kiwoomToken = {};
+  localStorage.removeItem('sm-kiwoom');
+  localStorage.removeItem('sm-kiwoom-token');
+  document.getElementById('kw-appkey').value    = '';
+  document.getElementById('kw-appsecret').value = '';
+  _updateKiwoomStatus();
+  toast('키움 API 설정이 삭제되었습니다.');
+}
+
+// ── POST/GET 래퍼 (CORS 실패 시 프록시 경유) ──
+async function _kiwoomFetch(url, options = {}) {
+  // 1차: 직접 호출
+  try {
+    const res = await fetch(url, options);
+    if (res.ok || res.status < 500) return res;
+  } catch(_) {}
+  // 2차: CORS 프록시
+  return fetch(KIWOOM_PROXY + encodeURIComponent(url), options);
+}
+
+// ── 토큰 발급 ──
+async function issueKiwoomToken() {
+  const { appkey, appsecret } = kiwoomSettings;
+  if (!appkey || !appsecret) {
+    toast('먼저 설정 탭에서 App Key와 App Secret을 저장하세요.', 'red'); return false;
+  }
+  const btn = document.getElementById('kw-token-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 발급 중...'; }
+  const statusEl = document.getElementById('kw-status');
+
+  try {
+    const res = await _kiwoomFetch(KIWOOM_BASE + '/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'client_credentials', appkey, appsecret })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!json.access_token) throw new Error(json.msg1 || json.message || '토큰 응답 오류');
+
+    const expiresIn = parseInt(json.expires_in) || 86400;
+    kiwoomToken = {
+      access_token: json.access_token,
+      token_type:   json.token_type || 'Bearer',
+      expires_at:   Date.now() + expiresIn * 1000
+    };
+    localStorage.setItem('sm-kiwoom-token', JSON.stringify(kiwoomToken));
+    _updateKiwoomStatus();
+    toast('키움 액세스 토큰이 발급되었습니다.', 'green');
+    return true;
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">❌ 토큰 발급 실패: ${e.message}</span>`;
+    toast(`키움 토큰 발급 실패: ${e.message}`, 'red');
+    return false;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔑 토큰 발급'; }
+  }
+}
+
+// ── 토큰 유효성 보장 (만료 시 자동 재발급) ──
+async function _ensureKiwoomToken() {
+  if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) return true;
+  return issueKiwoomToken();
+}
+
+// ── 6자리 종목코드 추출 (005930.KS → 005930) ──
+function _toKiwoomCode(ticker) {
+  if (!ticker) return null;
+  const m = (ticker + '').match(/^(\d{6})\.(KS|KQ|KN)$/i);
+  if (m) return m[1];
+  if (/^\d{6}$/.test(ticker)) return ticker;
+  return null;
+}
+
+// ── 단일 종목 현재가 조회 ──
+async function _kiwoomPrice(stockCode) {
+  const { appkey, appsecret } = kiwoomSettings;
+  const headers = {
+    'Authorization': `Bearer ${kiwoomToken.access_token}`,
+    'appkey':        appkey,
+    'appsecret':     appsecret,
+    'tr_id':         'FHKST01010100',
+    'Content-Type':  'application/json; charset=utf-8'
+  };
+  const url = `${KIWOOM_BASE}/v1/domestic-stock/market-price/current-price?stck_shrn_iscd=${stockCode}`;
+  const res = await _kiwoomFetch(url, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  // 응답 구조: { rt_cd, output: { stck_prpr, ... } }
+  const out   = json?.output || json;
+  const price = parseFloat(out?.stck_prpr ?? out?.output?.stck_prpr ?? out?.price);
+  if (!price || isNaN(price)) throw new Error(json?.msg1 || '가격 없음');
+  return price;
+}
+
+// ── 보유종목 키움 시세 조회 ──
+async function fetchPortfolioKiwoom() {
+  if (!kiwoomSettings.appkey) { toast('설정 탭에서 키움 API 키를 먼저 저장하세요.', 'red'); return; }
+  if (!(await _ensureKiwoomToken())) return;
+
+  const allStocks = [
+    ...Object.entries(calcHoldingsFromJournal()).filter(([,h]) => h.qty > 0.0001).map(([s]) => s),
+    ...portfolioManual.map(p => p.stock)
+  ];
+  const targets = [...new Set(allStocks)]
+    .map(s => ({ stock: s, code: _toKiwoomCode(resolveTickerCode(s)) }))
+    .filter(t => t.code);
+
+  if (!targets.length) {
+    toast('키움 종목코드(XXXXXX.KS)가 없습니다. 포트폴리오에 종목코드를 입력하세요.', 'red'); return;
+  }
+
+  const btn = document.getElementById('portfolio-kiwoom-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
+
+  let ok = 0, successList = [], fail = [];
+  for (const { stock, code } of targets) {
+    try {
+      const price = await _kiwoomPrice(code);
+      if (!portfolioMeta[stock]) portfolioMeta[stock] = { cur: 0, target: 0, stop: 0 };
+      portfolioMeta[stock].cur = price;
+      save('pmeta', portfolioMeta);
+      const mp = portfolioManual.find(p => p.stock === stock);
+      if (mp) { mp.cur = price; save('pmanual', portfolioManual); }
+      ok++;
+      successList.push({ stock, ticker: code, price });
+    } catch(e) {
+      fail.push({ stock, ticker: code });
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
+  renderPortfolio();  // checkPortfolioAlerts는 renderPortfolio 내에서 자동 호출됨
+  showPriceResultModal(successList, fail);
+}
+
+// ── 관심종목 키움 시세 조회 ──
+async function fetchWatchlistKiwoom() {
+  if (!kiwoomSettings.appkey) { toast('설정 탭에서 키움 API 키를 먼저 저장하세요.', 'red'); return; }
+  if (!(await _ensureKiwoomToken())) return;
+
+  const targets = watchlist.filter(w => _toKiwoomCode(w.ticker));
+  if (!targets.length) {
+    toast('키움 종목코드(XXXXXX.KS)가 없습니다. 관심종목에 종목코드를 입력하세요.', 'red'); return;
+  }
+
+  const btn = document.getElementById('watchlist-kiwoom-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
+
+  let successList = [], fail = [];
+  for (const w of targets) {
+    const code = _toKiwoomCode(w.ticker);
+    try {
+      const price = await _kiwoomPrice(code);
+      w.price = price;
+      successList.push({ stock: w.stock, ticker: code, price });
+    } catch(e) {
+      fail.push({ stock: w.stock, ticker: code });
+    }
+    await new Promise(r => setTimeout(r, 250));
+  }
+
+  save('watchlist', watchlist);
+  if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
+  renderWatchlist();
+  showPriceResultModal(successList, fail);
 }
 
 // ══════════════════════════════════════════════════════
