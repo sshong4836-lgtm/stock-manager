@@ -1218,6 +1218,10 @@
             <label>App Secret</label>
             <input type="password" id="kw-appsecret" placeholder="발급받은 App Secret 입력" style="font-family:monospace;font-size:12px">
           </div>
+          <div class="form-group">
+            <label>프록시 서버 URL</label>
+            <input type="text" id="kw-proxy" placeholder="http://192.168.200.124:3000" style="font-family:monospace;font-size:12px">
+          </div>
         </div>
         <div class="row-flex" style="margin-top:16px;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="saveKiwoomSettings()">💾 설정 저장</button>
@@ -1252,11 +1256,21 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title">⚠️ CORS 주의사항</div>
-        <div class="info-note info-note-orange" style="margin:0;font-size:12px;line-height:1.8">
-          브라우저에서 직접 API 호출 시 CORS 오류가 발생할 수 있습니다.<br>
-          오류 발생 시 <strong>공개 프록시(corsproxy.io)</strong>를 경유합니다.<br>
-          <strong>보안 주의</strong>: 실사용 환경에서는 로컬 프록시 서버 구성을 권장합니다.
+        <div class="card-title">🖥️ 맥미니 프록시 서버</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+          <div style="background:var(--bg3);border-radius:8px;padding:12px">
+            <strong style="color:var(--green)">동작 방식</strong><br>
+            브라우저 → <strong>맥미니 프록시</strong> → 키움 API<br>
+            <span style="color:var(--muted);font-size:12px">CORS 없이 안전하게 API 호출</span>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:12px">
+            <strong style="color:var(--orange)">프록시 URL 예시</strong><br>
+            <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">http://192.168.200.124:3000</code><br>
+            <span style="color:var(--muted);font-size:12px">설정 저장 후 토큰 발급하세요.</span>
+          </div>
+          <div class="info-note info-note-blue" style="margin:0;font-size:12px">
+            프록시 미입력 시 브라우저에서 키움 API를 직접 호출합니다 (CORS 오류 가능).
+          </div>
         </div>
       </div>
     </div>
@@ -4857,8 +4871,7 @@ async function fetchAllEtfWatchPrices() {
 // 키움증권 REST API
 // ══════════════════════════════════════════════════════
 
-const KIWOOM_BASE  = 'https://api.kiwoom.com';
-const KIWOOM_PROXY = 'https://corsproxy.io/?';
+const KIWOOM_BASE = 'https://api.kiwoom.com';
 
 let kiwoomSettings = JSON.parse(localStorage.getItem('sm-kiwoom')       || '{}');
 let kiwoomToken    = JSON.parse(localStorage.getItem('sm-kiwoom-token') || '{}');
@@ -4868,6 +4881,7 @@ function loadKiwoomSettingsUI() {
   if (!keyEl) return;
   if (kiwoomSettings.appkey)    keyEl.value = kiwoomSettings.appkey;
   if (kiwoomSettings.appsecret) document.getElementById('kw-appsecret').value = kiwoomSettings.appsecret;
+  if (kiwoomSettings.proxyUrl)  document.getElementById('kw-proxy').value     = kiwoomSettings.proxyUrl;
   _updateKiwoomStatus();
 }
 
@@ -4878,19 +4892,23 @@ function _updateKiwoomStatus() {
     el.innerHTML = '<span style="color:var(--muted)">⚠️ App Key와 App Secret을 입력하고 저장하세요.</span>';
     return;
   }
+  const proxy = kiwoomSettings.proxyUrl
+    ? `<span style="color:var(--blue);margin-left:8px">🖥️ 프록시: ${kiwoomSettings.proxyUrl}</span>`
+    : '<span style="color:var(--muted);margin-left:8px">(프록시 미설정 — 직접 호출)</span>';
   if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) {
     const exp = new Date(kiwoomToken.expires_at).toLocaleString('ko-KR');
-    el.innerHTML = `<span style="color:var(--green)">✅ 토큰 유효 — 만료: ${exp}</span>`;
+    el.innerHTML = `<span style="color:var(--green)">✅ 토큰 유효 — 만료: ${exp}</span>${proxy}`;
   } else {
-    el.innerHTML = '<span style="color:var(--yellow)">⚠️ 토큰 없음 또는 만료 — 토큰 발급 버튼을 클릭하세요.</span>';
+    el.innerHTML = `<span style="color:var(--yellow)">⚠️ 토큰 없음 또는 만료 — 토큰 발급 버튼을 클릭하세요.</span>${proxy}`;
   }
 }
 
 function saveKiwoomSettings() {
   const appkey    = document.getElementById('kw-appkey').value.trim();
   const appsecret = document.getElementById('kw-appsecret').value.trim();
+  const proxyUrl  = document.getElementById('kw-proxy').value.trim().replace(/\/$/, '');
   if (!appkey || !appsecret) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
-  kiwoomSettings = { appkey, appsecret };
+  kiwoomSettings = { appkey, appsecret, ...(proxyUrl && { proxyUrl }) };
   localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
   _updateKiwoomStatus();
   toast('키움 API 설정이 저장되었습니다.', 'green');
@@ -4903,19 +4921,21 @@ function clearKiwoomSettings() {
   localStorage.removeItem('sm-kiwoom-token');
   document.getElementById('kw-appkey').value    = '';
   document.getElementById('kw-appsecret').value = '';
+  document.getElementById('kw-proxy').value     = '';
   _updateKiwoomStatus();
   toast('키움 API 설정이 삭제되었습니다.');
 }
 
-// ── POST/GET 래퍼 (CORS 실패 시 프록시 경유) ──
-async function _kiwoomFetch(url, options = {}) {
-  // 1차: 직접 호출
-  try {
-    const res = await fetch(url, options);
-    if (res.ok || res.status < 500) return res;
-  } catch(_) {}
-  // 2차: CORS 프록시
-  return fetch(KIWOOM_PROXY + encodeURIComponent(url), options);
+// ── 프록시 경유 fetch 래퍼 ──
+// proxyUrl 설정 시: http://192.168.200.124:3000/oauth2/token 형태로 호출
+// 미설정 시: https://api.kiwoom.com/... 직접 호출
+function _kiwoomUrl(path) {
+  const base = kiwoomSettings.proxyUrl || KIWOOM_BASE;
+  return base + path;
+}
+
+async function _kiwoomFetch(path, options = {}) {
+  return fetch(_kiwoomUrl(path), options);
 }
 
 // ── 토큰 발급 ──
@@ -4929,7 +4949,7 @@ async function issueKiwoomToken() {
   const statusEl = document.getElementById('kw-status');
 
   try {
-    const res = await _kiwoomFetch(KIWOOM_BASE + '/oauth2/token', {
+    const res = await _kiwoomFetch('/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ grant_type: 'client_credentials', appkey, appsecret })
@@ -4982,8 +5002,10 @@ async function _kiwoomPrice(stockCode) {
     'tr_id':         'FHKST01010100',
     'Content-Type':  'application/json; charset=utf-8'
   };
-  const url = `${KIWOOM_BASE}/v1/domestic-stock/market-price/current-price?stck_shrn_iscd=${stockCode}`;
-  const res = await _kiwoomFetch(url, { headers });
+  const res = await _kiwoomFetch(
+    `/v1/domestic-stock/market-price/current-price?stck_shrn_iscd=${stockCode}`,
+    { headers }
+  );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
   // 응답 구조: { rt_cd, output: { stck_prpr, ... } }
