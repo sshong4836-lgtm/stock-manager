@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if (Test-Path 'stock-manager.html') { Copy-Item 'stock-manager.html' 'index.html' -Force }",
+            "shell": "powershell",
+            "if": "Write(*stock-manager.html)|Edit(*stock-manager.html)",
+            "statusMessage": "index.html 동기화 중..."
+          }
+        ]
+      }
+    ]
+  }
+}
