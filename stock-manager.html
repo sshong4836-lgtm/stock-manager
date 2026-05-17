@@ -410,6 +410,7 @@
   <button class="tab-btn"        onclick="switchTab(this,'alert')">🔔 장시간 알림</button>
   <button class="tab-btn"        onclick="switchTab(this,'futures')">⚡ 선물동향</button>
   <button class="tab-btn"        onclick="switchTab(this,'daytrade')">⚡ 단타수익</button>
+  <button class="tab-btn"        onclick="switchTab(this,'settings')">⚙️ 설정</button>
 </div>
 
 <div class="content">
@@ -1121,6 +1122,83 @@
 
 </div>
 
+<!-- ══════════════════════════════
+     TAB : 설정
+══════════════════════════════ -->
+<div id="tab-settings" class="tab-content">
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-title">📱 텔레그램 알림 설정</div>
+        <div class="info-note info-note-blue" style="margin-bottom:16px">
+          보유 종목의 <strong>목표가 도달</strong> 또는 <strong>손절가 이탈</strong> 시 텔레그램으로 즉시 알림을 받을 수 있습니다.<br>
+          봇 토큰과 채팅 ID를 입력하고 저장하면 자동으로 감지합니다.
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr;gap:14px">
+          <div class="form-group">
+            <label>봇 토큰 (Bot Token)</label>
+            <input type="text" id="tg-token" placeholder="1234567890:ABCdefGHIjklMNOpqrSTUVwxyz" style="font-family:monospace;font-size:12px">
+          </div>
+          <div class="form-group">
+            <label>채팅 ID (Chat ID)</label>
+            <input type="text" id="tg-chatid" placeholder="-100123456789 또는 개인 채팅 ID">
+          </div>
+        </div>
+        <div class="row-flex" style="margin-top:16px;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="saveTelegramSettings()">💾 설정 저장</button>
+          <button class="btn btn-ghost" onclick="testTelegramMessage()">📨 테스트 메시지 전송</button>
+          <button class="btn btn-danger btn-sm" onclick="clearTelegramSettings()" style="margin-left:auto">설정 삭제</button>
+        </div>
+        <div id="tg-status" style="margin-top:12px;font-size:12px;color:var(--muted);min-height:18px"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">ℹ️ 텔레그램 봇 설정 방법</div>
+        <div style="font-size:13px;line-height:1.9;color:var(--text)">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:var(--bg3);border-radius:8px;padding:12px">
+              <strong style="color:var(--blue)">① 봇 생성</strong><br>
+              텔레그램에서 <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">@BotFather</code> 를 검색 →<br>
+              <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">/newbot</code> 명령어 입력 → 봇 이름/사용자명 설정<br>
+              → 발급된 <strong>토큰</strong>을 위에 입력
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px">
+              <strong style="color:var(--blue)">② 채팅 ID 확인</strong><br>
+              생성한 봇에게 아무 메시지 전송 후<br>
+              브라우저에서 아래 URL 접속:<br>
+              <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;word-break:break-all">https://api.telegram.org/bot<strong>토큰</strong>/getUpdates</code><br>
+              → <code>result[0].message.chat.id</code> 값이 채팅 ID
+            </div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px">
+              <strong style="color:var(--blue)">③ 그룹 채널 (선택)</strong><br>
+              그룹/채널에 봇을 추가하면 그룹 채팅 ID 사용 가능<br>
+              채널 채팅 ID는 보통 <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px">-100</code>으로 시작
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔔 알림 발송 조건</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+          <div style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.25);border-radius:8px;padding:12px">
+            <strong style="color:var(--green)">🎯 목표가 도달</strong><br>
+            <span style="color:var(--muted);font-size:12px">포트폴리오 보유 종목의 현재가 ≥ 목표가</span>
+          </div>
+          <div style="background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:8px;padding:12px">
+            <strong style="color:var(--red)">🚨 손절가 이탈</strong><br>
+            <span style="color:var(--muted);font-size:12px">포트폴리오 보유 종목의 현재가 ≤ 손절가</span>
+          </div>
+          <div class="info-note info-note-orange" style="margin:0">
+            시세 가져오기 또는 현재가 직접 입력 시 자동 체크됩니다.<br>
+            동일 조건 중복 발송 방지: 30분 쿨다운 적용
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- /content -->
 
 <script>
@@ -1175,6 +1253,7 @@ function switchTab(btn, name) {
   if (name === 'daytrade') renderDayTrade();
   if (name === 'futures')  renderFutures();
   if (name === 'etfwatch') renderEtfWatch();
+  if (name === 'settings') loadTelegramSettingsUI();
 }
 
 // ══════════════════════════════════════════════════════
@@ -1592,6 +1671,7 @@ function renderPortfolio() {
   }
 
   updateStockDatalist();
+  checkPortfolioAlerts(allRows);
 }
 
 function updateStockDatalist() {
@@ -4707,6 +4787,149 @@ async function fetchAllEtfWatchPrices() {
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
   toast(`시세 갱신 완료: ${ok}건 성공${fail ? ', '+fail+'건 실패' : ''}`);
+}
+
+// ══════════════════════════════════════════════════════
+// 텔레그램 알림
+// ══════════════════════════════════════════════════════
+
+let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
+let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
+
+function loadTelegramSettingsUI() {
+  const tokenEl  = document.getElementById('tg-token');
+  const chatEl   = document.getElementById('tg-chatid');
+  const statusEl = document.getElementById('tg-status');
+  if (!tokenEl) return;
+  if (telegramSettings.token)  tokenEl.value  = telegramSettings.token;
+  if (telegramSettings.chatId) chatEl.value = telegramSettings.chatId;
+  if (telegramSettings.token && telegramSettings.chatId) {
+    statusEl.textContent = '✅ 설정이 저장되어 있습니다.';
+    statusEl.style.color = 'var(--green)';
+  } else {
+    statusEl.textContent = '⚠️ 봇 토큰과 채팅 ID를 입력하고 저장하세요.';
+    statusEl.style.color = 'var(--muted)';
+  }
+}
+
+function saveTelegramSettings() {
+  const token  = document.getElementById('tg-token').value.trim();
+  const chatId = document.getElementById('tg-chatid').value.trim();
+  if (!token || !chatId) { toast('봇 토큰과 채팅 ID를 모두 입력하세요.', 'red'); return; }
+  telegramSettings = { token, chatId };
+  localStorage.setItem('sm-telegram', JSON.stringify(telegramSettings));
+  const statusEl = document.getElementById('tg-status');
+  statusEl.textContent = '✅ 저장 완료 (' + new Date().toLocaleTimeString('ko-KR') + ')';
+  statusEl.style.color = 'var(--green)';
+  toast('텔레그램 설정이 저장되었습니다.', 'green');
+}
+
+function clearTelegramSettings() {
+  if (!confirm('텔레그램 설정을 삭제할까요?')) return;
+  telegramSettings = {};
+  localStorage.removeItem('sm-telegram');
+  document.getElementById('tg-token').value  = '';
+  document.getElementById('tg-chatid').value = '';
+  const statusEl = document.getElementById('tg-status');
+  statusEl.textContent = '설정이 삭제되었습니다.';
+  statusEl.style.color = 'var(--muted)';
+  toast('텔레그램 설정이 삭제되었습니다.');
+}
+
+async function _tgFetch(token, chatId, text) {
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+  });
+  const json = await res.json();
+  return json.ok === true;
+}
+
+async function testTelegramMessage() {
+  const token  = document.getElementById('tg-token').value.trim();
+  const chatId = document.getElementById('tg-chatid').value.trim();
+  if (!token || !chatId) { toast('봇 토큰과 채팅 ID를 먼저 입력하세요.', 'red'); return; }
+  const statusEl = document.getElementById('tg-status');
+  statusEl.textContent = '⏳ 전송 중...';
+  statusEl.style.color = 'var(--muted)';
+  try {
+    const msg = `✅ <b>주식 종합 관리 — 연결 테스트</b>\n\n텔레그램 알림이 정상적으로 연결되었습니다.\n${new Date().toLocaleString('ko-KR')}`;
+    const ok = await _tgFetch(token, chatId, msg);
+    if (ok) {
+      statusEl.textContent = '✅ 테스트 메시지 전송 성공!';
+      statusEl.style.color = 'var(--green)';
+      toast('텔레그램 테스트 메시지를 전송했습니다.', 'green');
+    } else {
+      throw new Error('API 응답 ok=false');
+    }
+  } catch(e) {
+    statusEl.textContent = '❌ 전송 실패 — 봇 토큰 / 채팅 ID를 확인하세요.';
+    statusEl.style.color = 'var(--red)';
+    toast('텔레그램 전송 실패. 설정값을 확인하세요.', 'red');
+  }
+}
+
+function _saveTgSent() {
+  // 24시간 지난 항목 정리
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  Object.keys(_tgSentAlerts).forEach(k => {
+    if (_tgSentAlerts[k] < cutoff) delete _tgSentAlerts[k];
+  });
+  localStorage.setItem('sm-tg-sent', JSON.stringify(_tgSentAlerts));
+}
+
+async function checkPortfolioAlerts(rows) {
+  const { token, chatId } = telegramSettings;
+  if (!token || !chatId) return;
+  const now      = Date.now();
+  const COOLDOWN = 30 * 60 * 1000; // 30분
+
+  for (const r of rows) {
+    if (!r.cur || r.cur <= 0) continue;
+    const plPct = r.avg ? (r.cur - r.avg) / r.avg * 100 : 0;
+    const plStr = (plPct >= 0 ? '+' : '') + fmtF(plPct, 2) + '%';
+
+    // 목표가 도달
+    if (r.target > 0 && r.cur >= r.target) {
+      const key = `tgt-${r.stock}`;
+      if (!_tgSentAlerts[key] || (now - _tgSentAlerts[key]) > COOLDOWN) {
+        const msg =
+          `🎯 <b>목표가 도달!</b>\n` +
+          `종목명: <b>${r.stock}</b>\n` +
+          `현재가: ${fmt(r.cur)}원\n` +
+          `목표가: ${fmt(r.target)}원\n` +
+          `등락률: ${plStr}`;
+        try {
+          const ok = await _tgFetch(token, chatId, msg);
+          if (ok) { _tgSentAlerts[key] = now; _saveTgSent(); toast(`📱 텔레그램: ${r.stock} 목표가 도달 알림 전송`, 'green'); }
+        } catch(_) {}
+      }
+    } else {
+      // 조건 해제 시 쿨다운 초기화 → 다음 도달 때 재알림
+      delete _tgSentAlerts[`tgt-${r.stock}`];
+    }
+
+    // 손절가 이탈
+    if (r.stop > 0 && r.cur <= r.stop) {
+      const key = `stp-${r.stock}`;
+      if (!_tgSentAlerts[key] || (now - _tgSentAlerts[key]) > COOLDOWN) {
+        const msg =
+          `🚨 <b>손절가 이탈!</b>\n` +
+          `종목명: <b>${r.stock}</b>\n` +
+          `현재가: ${fmt(r.cur)}원\n` +
+          `손절가: ${fmt(r.stop)}원\n` +
+          `등락률: ${plStr}`;
+        try {
+          const ok = await _tgFetch(token, chatId, msg);
+          if (ok) { _tgSentAlerts[key] = now; _saveTgSent(); toast(`📱 텔레그램: ${r.stock} 손절가 이탈 알림 전송`, 'red'); }
+        } catch(_) {}
+      }
+    } else {
+      delete _tgSentAlerts[`stp-${r.stock}`];
+    }
+  }
+  _saveTgSent();
 }
 </script>
 </body>
