@@ -1343,6 +1343,11 @@ const cc    = n => n > 0 ? 'text-green' : n < 0 ? 'text-red' : 'text-muted';
 const sign  = n => n > 0 ? '+' : '';
 const today = () => new Date().toISOString().slice(0, 10);
 
+// 화면 표시용 종목코드: .KS/.KQ/.KN 접미사 제거
+function dispTicker(ticker) {
+  return (ticker || '').replace(/\.(KS|KQ|KN)$/i, '');
+}
+
 // 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 영숫자 코드, 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
 function fmtPrice(price, ticker) {
   const t = (ticker || '').toUpperCase().trim();
@@ -2547,10 +2552,10 @@ function renderEtfAcctTab(acctId) {
               <div style="margin-top:4px;display:flex;align-items:center;gap:4px">
                 <input type="text" inputmode="text" autocomplete="off" spellcheck="false"
                   class="cur-input" style="width:110px;font-size:11px;padding:3px 6px;text-align:left;color:var(--muted)"
-                  value="${resolveTickerCode(r.stock)}"
-                  placeholder="종목코드 (예: 449450.KS)"
+                  value="${dispTicker(resolveTickerCode(r.stock))}"
+                  placeholder="종목코드 (예: 449450)"
                   onchange="updateEtfTicker('${r.stock}',this.value)"
-                  title="Yahoo Finance 종목코드. 한국ETF는 숫자6자리.KS 형식">
+                  title="종목코드 6자리 (예: 449450)">
               </div>
             </td>
             <td class="text-right">${fmt(r.h.qty)}주</td>
@@ -4617,7 +4622,7 @@ function renderEtfWatch() {
         <span class="wc-dot" style="background:${groupColor};box-shadow:0 0 6px ${groupColor};flex-shrink:0;width:10px;height:10px;border-radius:50%" title="${ETFW_GROUP_LABEL[e.group]||''}"></span>
         <div class="wc-info">
           <span class="wc-name" title="${ea(e.name)}">${eh(e.name)}</span>
-          <span class="wc-tkr">${eh(e.ticker||'—')}</span>
+          <span class="wc-tkr">${eh(dispTicker(e.ticker)||'—')}</span>
         </div>
         <div class="wc-prices">
           <span class="wc-cur">${e.price ? fmt(e.price)+'원' : '—'}</span>
@@ -5079,7 +5084,7 @@ async function fetchWatchlistKiwoom() {
     try {
       const price = await _kiwoomPrice(code);
       w.price = price;
-      successList.push({ stock: w.stock, ticker: code, price });
+      successList.push({ stock: w.stock, ticker: w.ticker, price });
     } catch(e) {
       fail.push({ stock: w.stock, ticker: code });
     }
