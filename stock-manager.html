@@ -2160,7 +2160,7 @@ async function fetchEtfPrices(acctId) {
     return;
   }
 
-  const hasToken = kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0);
+  const hasToken = !!(kiwoomToken.access_token || kiwoomSettings.token);
   if (!hasToken && kiwoomSettings.appkey) {
     toast('키움 토큰 없음 — 설정 탭에서 토큰 발급 후 사용하세요. Yahoo Finance로 조회합니다.', 'orange');
   }
@@ -4851,7 +4851,7 @@ async function fetchAllEtfWatchPrices() {
   const targets = etfWatchlist.filter(e => e.ticker);
   if (!targets.length) { toast('종목코드가 없습니다.', 'red'); return; }
 
-  const hasToken = kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0);
+  const hasToken = !!(kiwoomToken.access_token || kiwoomSettings.token);
   if (!hasToken && kiwoomSettings.appkey) {
     toast('키움 토큰 없음 — 설정 탭에서 토큰 발급 후 사용하세요. Yahoo Finance로 조회합니다.', 'orange');
   }
@@ -4916,8 +4916,8 @@ function _updateKiwoomStatus() {
   const proxy = kiwoomSettings.proxyUrl
     ? `<span style="color:var(--blue);margin-left:8px">🖥️ 프록시: ${kiwoomSettings.proxyUrl}</span>`
     : '<span style="color:var(--muted);margin-left:8px">(프록시 미설정 — 직접 호출)</span>';
-  if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) {
-    const exp = new Date(kiwoomToken.expires_at).toLocaleString('ko-KR');
+  if (kiwoomToken.access_token || kiwoomSettings.token) {
+    const exp = kiwoomToken.expires_at ? new Date(kiwoomToken.expires_at).toLocaleString('ko-KR') : '만료일 미확인';
     el.innerHTML = `<span style="color:var(--green)">✅ 토큰 유효 — 만료: ${exp}</span>${proxy}`;
   } else {
     el.innerHTML = `<span style="color:var(--yellow)">⚠️ 토큰 없음 또는 만료 — 토큰 발급 버튼을 클릭하세요.</span>${proxy}`;
@@ -4929,7 +4929,7 @@ function saveKiwoomSettings() {
   const secretkey = document.getElementById('kw-appsecret').value.trim();
   const proxyUrl  = document.getElementById('kw-proxy').value.trim().replace(/\/$/, '');
   if (!appkey || !secretkey) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
-  kiwoomSettings = { appkey, secretkey, ...(proxyUrl && { proxyUrl }) };
+  kiwoomSettings = { appkey, secretkey, ...(proxyUrl && { proxyUrl }), ...(kiwoomSettings.token && { token: kiwoomSettings.token }) };
   localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
   _updateKiwoomStatus();
   toast('키움 API 설정이 저장되었습니다.', 'green');
@@ -4988,6 +4988,8 @@ async function issueKiwoomToken() {
       expires_at:   Date.now() + expiresIn * 1000
     };
     localStorage.setItem('sm-kiwoom-token', JSON.stringify(kiwoomToken));
+    kiwoomSettings.token = token;
+    localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
     _updateKiwoomStatus();
     toast('키움 액세스 토큰이 발급되었습니다.', 'green');
     return true;
@@ -5002,7 +5004,7 @@ async function issueKiwoomToken() {
 
 // ── 토큰 유효성 보장 (만료 시 자동 재발급) ──
 async function _ensureKiwoomToken() {
-  if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) return true;
+  if (kiwoomToken.access_token || kiwoomSettings.token) return true;
   return issueKiwoomToken();
 }
 
@@ -5017,8 +5019,10 @@ function _toKiwoomCode(ticker) {
 
 // ── 단일 종목 현재가 조회 ──
 async function _kiwoomPrice(stockCode) {
+  const bearerToken = kiwoomToken.access_token || kiwoomSettings.token;
+  if (!bearerToken) throw new Error('토큰 없음');
   const headers = {
-    'authorization': `Bearer ${kiwoomToken.access_token}`,
+    'authorization': `Bearer ${bearerToken}`,
     'api-id':        'ka10095',
     'Content-Type':  'application/json'
   };
