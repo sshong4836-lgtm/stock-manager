@@ -5006,12 +5006,12 @@ async function _ensureKiwoomToken() {
   return issueKiwoomToken();
 }
 
-// ── 6자리 종목코드 추출 (005930.KS → 005930) ──
+// ── 6자리 종목코드 추출 (005930.KS → 005930, 0144L0.KS → 0144L0) ──
 function _toKiwoomCode(ticker) {
   if (!ticker) return null;
-  const m = (ticker + '').match(/^(\d{6})\.(KS|KQ|KN)$/i);
-  if (m) return m[1];
-  if (/^\d{6}$/.test(ticker)) return ticker;
+  const m = (ticker + '').match(/^([A-Z0-9]{6})\.(KS|KQ|KN)$/i);
+  if (m) return m[1].toUpperCase();
+  if (/^[A-Z0-9]{6}$/i.test(ticker)) return ticker.toUpperCase();
   return null;
 }
 
