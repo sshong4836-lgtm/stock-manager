@@ -1092,7 +1092,7 @@
       <div class="form-group">
         <label>종목코드</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="etfw-ticker" placeholder="예: 069500.KS" style="flex:1"
+          <input type="text" id="etfw-ticker" placeholder="예: 069500" style="flex:1"
             onkeydown="if(event.key==='Enter'){event.preventDefault();searchEtfWatchTicker()}">
           <button type="button" id="etfw-ticker-search-btn" class="btn btn-ghost btn-sm"
             onclick="searchEtfWatchTicker()" title="Yahoo Finance에서 ETF명·현재가 자동 조회">🔍 조회</button>
@@ -2537,7 +2537,7 @@ function renderEtfAcctTab(acctId) {
           <button class="btn btn-orange btn-sm no-print" onclick="exportEtfCSV('${acctId}')">📥 CSV</button>
         </div>
       </div>
-      <div class="info-note info-note-blue" style="margin-bottom:10px;font-size:12px">종목코드 입력 후 <strong>시세 가져오기</strong>를 누르면 Yahoo Finance에서 현재가를 자동으로 불러옵니다. (예: KODEX 미국성장커버드콜액티브 → <code>449450.KS</code>)</div>
+      <div class="info-note info-note-blue" style="margin-bottom:10px;font-size:12px">종목코드 입력 후 <strong>시세 가져오기</strong>를 누르면 키움 API에서 현재가를 자동으로 불러옵니다. (예: KODEX 미국성장커버드콜액티브 → <code>449450</code>)</div>
       <div class="table-wrap"><table>
         <thead><tr>
           <th>ETF명 / 종목코드</th><th class="text-right">수량</th><th class="text-right">평균단가</th>
