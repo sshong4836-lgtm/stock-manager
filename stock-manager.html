@@ -4954,7 +4954,7 @@ async function issueKiwoomToken() {
     const res = await _kiwoomFetch('/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grant_type: 'client_credentials', appkey, secretkey })
+      body: JSON.stringify({ grant_type: 'client_credentials', appkey, secretkey: appsecret })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
