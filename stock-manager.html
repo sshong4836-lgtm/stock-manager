@@ -1343,10 +1343,10 @@ const cc    = n => n > 0 ? 'text-green' : n < 0 ? 'text-red' : 'text-muted';
 const sign  = n => n > 0 ? '+' : '';
 const today = () => new Date().toISOString().slice(0, 10);
 
-// 통화 인식 가격 포맷: .KS/.KQ/.KN 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
+// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 영숫자 코드, 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
 function fmtPrice(price, ticker) {
   const t = (ticker || '').toUpperCase().trim();
-  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')) return fmt(price) + '원';
+  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN') || /^[A-Z0-9]{6}$/.test(t)) return fmt(price) + '원';
   return (price % 1 === 0 ? fmt(price) : fmtF(price, 2)) + ' USD';
 }
 
@@ -2174,11 +2174,9 @@ async function fetchEtfPrices(acctId) {
     try {
       if (!kiwoomCode) throw new Error('종목코드 변환 실패');
       const price = await _kiwoomPrice(kiwoomCode);
-      ETF_ACCOUNTS.forEach(a => {
-        if (!etfAcctD[a.id][stock]) etfAcctD[a.id][stock] = {};
-        etfAcctD[a.id][stock].cur = price;
-        saveEtfD(a.id);
-      });
+      if (!etfAcctD[acctId][stock]) etfAcctD[acctId][stock] = {};
+      etfAcctD[acctId][stock].cur = price;
+      saveEtfD(acctId);
       ok++;
       successList.push({ stock, ticker: kiwoomCode, price });
     } catch(e) {
