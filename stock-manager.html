@@ -2184,7 +2184,7 @@ async function fetchEtfPrices(acctId) {
     } catch(e) {
       fail.push({ stock, ticker: kiwoomCode || ticker });
     }
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 500));
   }
 
   if (btn) { btn.disabled = false; btn.textContent = '🔄 시세 가져오기'; }
@@ -4843,7 +4843,7 @@ async function fetchAllEtfWatchPrices() {
       e.price = await _kiwoomPrice(kiwoomCode);
       ok++;
     } catch(_) { fail++; }
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 500));
   }
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
