@@ -2167,7 +2167,7 @@ async function fetchEtfPrices(acctId) {
   const btn = document.getElementById('etf-fetch-btn-' + acctId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
 
-  let ok = 0, successList = [], fail = [];
+  let successList = [], retryQueue = [];
   for (const stock of targets) {
     const ticker = resolveTickerCode(stock);
     const kiwoomCode = _toKiwoomCode(ticker);
@@ -2177,12 +2177,31 @@ async function fetchEtfPrices(acctId) {
       if (!etfAcctD[acctId][stock]) etfAcctD[acctId][stock] = {};
       etfAcctD[acctId][stock].cur = price;
       saveEtfD(acctId);
-      ok++;
       successList.push({ stock, ticker: kiwoomCode, price });
     } catch(e) {
-      fail.push({ stock, ticker: kiwoomCode || ticker });
+      retryQueue.push({ stock, ticker: resolveTickerCode(stock), kiwoomCode: kiwoomCode || null });
     }
     await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // 실패 종목 재시도 (2초 대기 후 1회)
+  let fail = [];
+  if (retryQueue.length) {
+    if (btn) btn.textContent = '⏳ 재시도 중...';
+    await new Promise(r => setTimeout(r, 2000));
+    for (const { stock, ticker, kiwoomCode } of retryQueue) {
+      try {
+        if (!kiwoomCode) throw new Error('종목코드 변환 실패');
+        const price = await _kiwoomPrice(kiwoomCode);
+        if (!etfAcctD[acctId][stock]) etfAcctD[acctId][stock] = {};
+        etfAcctD[acctId][stock].cur = price;
+        saveEtfD(acctId);
+        successList.push({ stock, ticker: kiwoomCode, price });
+      } catch(e) {
+        fail.push({ stock, ticker: kiwoomCode || ticker });
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
 
   if (btn) { btn.disabled = false; btn.textContent = '🔄 시세 가져오기'; }
