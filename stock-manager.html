@@ -2184,6 +2184,7 @@ async function fetchEtfPrices(acctId) {
     } catch(e) {
       fail.push({ stock, ticker: kiwoomCode || ticker });
     }
+    await new Promise(r => setTimeout(r, 300));
   }
 
   if (btn) { btn.disabled = false; btn.textContent = '🔄 시세 가져오기'; }
