@@ -4880,7 +4880,8 @@ function loadKiwoomSettingsUI() {
   const keyEl = document.getElementById('kw-appkey');
   if (!keyEl) return;
   if (kiwoomSettings.appkey)    keyEl.value = kiwoomSettings.appkey;
-  if (kiwoomSettings.appsecret) document.getElementById('kw-appsecret').value = kiwoomSettings.appsecret;
+  const secret = kiwoomSettings.secretkey || kiwoomSettings.appsecret || '';
+  if (secret) document.getElementById('kw-appsecret').value = secret;
   if (kiwoomSettings.proxyUrl)  document.getElementById('kw-proxy').value     = kiwoomSettings.proxyUrl;
   _updateKiwoomStatus();
 }
@@ -4905,10 +4906,10 @@ function _updateKiwoomStatus() {
 
 function saveKiwoomSettings() {
   const appkey    = document.getElementById('kw-appkey').value.trim();
-  const appsecret = document.getElementById('kw-appsecret').value.trim();
+  const secretkey = document.getElementById('kw-appsecret').value.trim();
   const proxyUrl  = document.getElementById('kw-proxy').value.trim().replace(/\/$/, '');
-  if (!appkey || !appsecret) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
-  kiwoomSettings = { appkey, appsecret, ...(proxyUrl && { proxyUrl }) };
+  if (!appkey || !secretkey) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
+  kiwoomSettings = { appkey, secretkey, ...(proxyUrl && { proxyUrl }) };
   localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
   _updateKiwoomStatus();
   toast('키움 API 설정이 저장되었습니다.', 'green');
@@ -4940,8 +4941,9 @@ async function _kiwoomFetch(path, options = {}) {
 
 // ── 토큰 발급 ──
 async function issueKiwoomToken() {
-  const { appkey, appsecret } = kiwoomSettings;
-  if (!appkey || !appsecret) {
+  const appkey    = kiwoomSettings.appkey;
+  const secretkey = kiwoomSettings.secretkey || kiwoomSettings.appsecret;
+  if (!appkey || !secretkey) {
     toast('먼저 설정 탭에서 App Key와 App Secret을 저장하세요.', 'red'); return false;
   }
   const btn = document.getElementById('kw-token-btn');
@@ -4952,16 +4954,17 @@ async function issueKiwoomToken() {
     const res = await _kiwoomFetch('/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grant_type: 'client_credentials', appkey, appsecret })
+      body: JSON.stringify({ grant_type: 'client_credentials', appkey, secretkey })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    if (!json.access_token) throw new Error(json.msg1 || json.message || '토큰 응답 오류');
+    const token = json.token || json.access_token;
+    if (!token) throw new Error(json.msg || json.msg1 || json.message || '토큰 응답 오류');
 
     const expiresIn = parseInt(json.expires_in) || 86400;
     kiwoomToken = {
-      access_token: json.access_token,
-      token_type:   json.token_type || 'Bearer',
+      access_token: token,
+      token_type:   'Bearer',
       expires_at:   Date.now() + expiresIn * 1000
     };
     localStorage.setItem('sm-kiwoom-token', JSON.stringify(kiwoomToken));
@@ -4994,24 +4997,22 @@ function _toKiwoomCode(ticker) {
 
 // ── 단일 종목 현재가 조회 ──
 async function _kiwoomPrice(stockCode) {
-  const { appkey, appsecret } = kiwoomSettings;
   const headers = {
-    'Authorization': `Bearer ${kiwoomToken.access_token}`,
-    'appkey':        appkey,
-    'appsecret':     appsecret,
-    'tr_id':         'FHKST01010100',
-    'Content-Type':  'application/json; charset=utf-8'
+    'authorization': `Bearer ${kiwoomToken.access_token}`,
+    'api-id':        'ka10095',
+    'Content-Type':  'application/json'
   };
-  const res = await _kiwoomFetch(
-    `/v1/domestic-stock/market-price/current-price?stck_shrn_iscd=${stockCode}`,
-    { headers }
-  );
+  const res = await _kiwoomFetch('/api/dostk/stkinfo', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ stk_cd: stockCode })
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
-  // 응답 구조: { rt_cd, output: { stck_prpr, ... } }
-  const out   = json?.output || json;
-  const price = parseFloat(out?.stck_prpr ?? out?.output?.stck_prpr ?? out?.price);
-  if (!price || isNaN(price)) throw new Error(json?.msg1 || '가격 없음');
+  const curPrc = json?.atn_stk_infr?.[0]?.cur_prc;
+  if (!curPrc) throw new Error(json?.msg || '가격 없음');
+  const price = parseFloat(String(curPrc).replace(/^[+-]/, ''));
+  if (isNaN(price)) throw new Error('가격 파싱 오류');
   return price;
 }
 
