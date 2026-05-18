@@ -4843,7 +4843,7 @@ async function fetchAllEtfWatchPrices() {
       e.price = await _kiwoomPrice(kiwoomCode);
       ok++;
     } catch(_) { fail++; }
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 300));
   }
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
