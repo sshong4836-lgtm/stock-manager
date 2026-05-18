@@ -2150,7 +2150,7 @@ function resolveTickerCode(stock) {
   return etfTickerMap[stock] || '';
 }
 
-// ── Yahoo Finance API로 현재가 일괄 조회 ──
+// ── ETF 탭 현재가 일괄 조회 (키움 우선, Yahoo Finance 폴백) ──
 async function fetchEtfPrices(acctId) {
   const hMap    = calcEtfH(acctId);
   const holdings = Object.entries(hMap).filter(([,h]) => h.qty > 0.0001).map(([s]) => s);
@@ -2160,6 +2160,11 @@ async function fetchEtfPrices(acctId) {
     return;
   }
 
+  const hasToken = kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0);
+  if (!hasToken && kiwoomSettings.appkey) {
+    toast('키움 토큰 없음 — 설정 탭에서 토큰 발급 후 사용하세요. Yahoo Finance로 조회합니다.', 'orange');
+  }
+
   const btn = document.getElementById('etf-fetch-btn-' + acctId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
 
@@ -2167,29 +2172,26 @@ async function fetchEtfPrices(acctId) {
   for (const stock of targets) {
     const ticker = resolveTickerCode(stock);
     try {
-      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d&_=${Date.now()}`;
-      const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-      const res  = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (!meta) throw new Error('데이터 없음');
+      let price = null;
+      const kiwoomCode = _toKiwoomCode(ticker);
 
-      // ── 디버그 로그 ──
-      console.group(`[시세조회] ${stock} (${ticker})`);
-      console.log('조회 URL:', yahooUrl);
-      console.log('regularMarketPrice :', meta.regularMarketPrice);
-      console.log('regularMarketPreviousClose:', meta.regularMarketPreviousClose);
-      console.log('chartPreviousClose  :', meta.chartPreviousClose);
-      console.log('previousClose       :', meta.previousClose);
-      console.log('currency            :', meta.currency);
-      console.log('exchangeName        :', meta.exchangeName);
-      console.log('symbol              :', meta.symbol);
-      console.log('full meta           :', meta);
-      console.groupEnd();
+      if (hasToken && kiwoomCode) {
+        try {
+          price = await _kiwoomPrice(kiwoomCode);
+        } catch(_) { price = null; }
+      }
 
-      const price = meta.regularMarketPrice;
-      if (!price) throw new Error('가격 없음');
+      if (price == null) {
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d&_=${Date.now()}`;
+        const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
+        const res  = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const meta = json?.chart?.result?.[0]?.meta;
+        if (!meta) throw new Error('데이터 없음');
+        price = meta.regularMarketPrice;
+        if (!price) throw new Error('가격 없음');
+      }
 
       // 해당 종목을 보유한 모든 계좌에 현재가 반영
       ETF_ACCOUNTS.forEach(a => {
@@ -4848,16 +4850,34 @@ async function searchEtfWatchTicker() {
 async function fetchAllEtfWatchPrices() {
   const targets = etfWatchlist.filter(e => e.ticker);
   if (!targets.length) { toast('종목코드가 없습니다.', 'red'); return; }
+
+  const hasToken = kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0);
+  if (!hasToken && kiwoomSettings.appkey) {
+    toast('키움 토큰 없음 — 설정 탭에서 토큰 발급 후 사용하세요. Yahoo Finance로 조회합니다.', 'orange');
+  }
+
   let ok = 0, fail = 0;
   for (const e of targets) {
     try {
-      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(e.ticker)}?interval=1d&range=1d&_=${Date.now()}`;
-      const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-      const res  = await fetch(url);
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (!price) throw new Error();
+      let price = null;
+      const kiwoomCode = _toKiwoomCode(e.ticker);
+
+      if (hasToken && kiwoomCode) {
+        try {
+          price = await _kiwoomPrice(kiwoomCode);
+        } catch(_) { price = null; }
+      }
+
+      if (price == null) {
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(e.ticker)}?interval=1d&range=1d&_=${Date.now()}`;
+        const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
+        const res  = await fetch(url);
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if (!price) throw new Error();
+      }
+
       e.price = price; ok++;
     } catch(_) { fail++; }
     await new Promise(r => setTimeout(r, 200));
