@@ -2216,7 +2216,7 @@ async function fetchEtfPrices(acctId) {
   const openWrap = document.getElementById('etf-holdings-wrap');
   if (openWrap && openWrap.style.display !== 'none') renderEtfHoldingsTable();
 
-  showPriceResultModal(successList, fail);
+  showPriceResultModal(successList, fail, true);
 }
 
 // ── 포트폴리오 탭 현재가 일괄 조회 ──
@@ -4178,7 +4178,7 @@ function toast(msg, color='blue', duration=10000) {
 }
 
 // ── 시세 조회 결과 팝업 ──
-function showPriceResultModal(successList, fail) {
+function showPriceResultModal(successList, fail, krw = false) {
   const existing = document.getElementById('price-result-modal');
   if (existing) existing.remove();
 
@@ -4193,8 +4193,8 @@ function showPriceResultModal(successList, fail) {
     `<li style="padding:4px 0;border-bottom:1px solid var(--border);font-size:13px">
        <span style="color:var(--green);margin-right:6px">✅</span>
        <strong>${stock}</strong>
-       <span style="color:var(--muted);font-size:11px;margin-left:4px">${ticker}</span>
-       <span style="float:right;font-weight:600">${fmtPrice(price, ticker)}</span>
+       <span style="color:var(--muted);font-size:11px;margin-left:4px">${dispTicker(ticker)}</span>
+       <span style="float:right;font-weight:600">${krw ? fmt(Math.round(price)) + '원' : fmtPrice(price, ticker)}</span>
      </li>`
   ).join('');
 
@@ -5062,7 +5062,7 @@ async function fetchPortfolioKiwoom() {
 
   if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
   renderPortfolio();  // checkPortfolioAlerts는 renderPortfolio 내에서 자동 호출됨
-  showPriceResultModal(successList, fail);
+  showPriceResultModal(successList, fail, true);
 }
 
 // ── 관심종목 키움 시세 조회 ──
@@ -5094,7 +5094,7 @@ async function fetchWatchlistKiwoom() {
   save('watchlist', watchlist);
   if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
   renderWatchlist();
-  showPriceResultModal(successList, fail);
+  showPriceResultModal(successList, fail, true);
 }
 
 // ══════════════════════════════════════════════════════
