@@ -1309,6 +1309,28 @@ let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]'
 // 종목명 → Yahoo Finance 종목코드 매핑 (전 계좌 공유)
 let etfTickerMap    = JSON.parse(localStorage.getItem('sm-etf-tickers')  || '{}');
 
+// ── 구데이터 마이그레이션: etfTickerMap에서 .KS/.KQ/.KN 접미사 제거 ──
+(function migrateEtfTickers() {
+  let changed = false;
+  Object.keys(etfTickerMap).forEach(k => {
+    const cleaned = (etfTickerMap[k] || '').replace(/\.(KS|KQ|KN)$/i, '');
+    if (cleaned !== etfTickerMap[k]) { etfTickerMap[k] = cleaned; changed = true; }
+  });
+  if (changed) localStorage.setItem('sm-etf-tickers', JSON.stringify(etfTickerMap));
+})();
+
+// ── 구데이터 마이그레이션: ETF관찰 e.ticker에서 .KS/.KQ/.KN 접미사 제거 ──
+(function migrateEtfWatchlistTickers() {
+  let changed = false;
+  etfWatchlist.forEach(e => {
+    if (e.ticker) {
+      const cleaned = e.ticker.replace(/\.(KS|KQ|KN)$/i, '');
+      if (cleaned !== e.ticker) { e.ticker = cleaned; changed = true; }
+    }
+  });
+  if (changed) localStorage.setItem('sm-etfwatchlist', JSON.stringify(etfWatchlist));
+})();
+
 
 const save = (key, data) => localStorage.setItem('sm-' + key, JSON.stringify(data));
 
@@ -1348,10 +1370,13 @@ function dispTicker(ticker) {
   return (ticker || '').replace(/\.(KS|KQ|KN)$/i, '');
 }
 
-// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 영숫자 코드, 1000원 이상 정수, 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
+// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 숫자코드, 1000원 이상 정수 → 원화, 그 외 → USD
 function fmtPrice(price, ticker) {
   const t = (ticker || '').toUpperCase().trim();
-  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN') || /^[A-Z0-9]{6}$/.test(t) || price >= 1000) return fmt(Math.round(price)) + '원';
+  // 한국 주식: .KS/.KQ/.KN 접미사, 또는 6자리 숫자코드(한국 종목코드), 또는 가격>=1000(원화)
+  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')
+      || /^[0-9]{6}$/.test(t) || /^[A-Z0-9]{6}$/.test(t) || price >= 1000)
+    return fmt(Math.round(price)) + '원';
   return (price % 1 === 0 ? fmt(price) : fmtF(price, 2)) + ' USD';
 }
 
@@ -1693,8 +1718,8 @@ function renderPortfolio() {
           <div style="margin-top:4px;display:flex;align-items:center;gap:4px">
             <input type="text" inputmode="text" autocomplete="off" spellcheck="false"
               class="cur-input" style="width:110px;font-size:11px;padding:3px 6px;text-align:left;color:var(--muted)"
-              value="${resolveTickerCode(r.stock)}"
-              placeholder="종목코드 (예: 005930.KS)"
+              value="${dispTicker(resolveTickerCode(r.stock))}"
+              placeholder="종목코드 (예: 005930)"
               onchange="updateEtfTicker('${r.stock}',this.value)"
               title="Yahoo Finance 종목코드. 한국 주식은 6자리숫자.KS 형식">
           </div>
@@ -3359,7 +3384,7 @@ function renderWatchlist() {
         <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
         <div class="wc-info">
           <span class="wc-name" title="${ea(w.stock)}">${eh(w.stock)}</span>
-          <span class="wc-tkr">${eh(w.ticker||'—')}</span>
+          <span class="wc-tkr">${eh(dispTicker(w.ticker)||'—')}</span>
           ${groupBadge}
         </div>
         <div class="wc-prices">
@@ -4751,7 +4776,7 @@ async function fetchSingleEtfWatchPrice(id) {
     renderEtfWatch();
     toast(`${e.name} 현재가 업데이트: ${fmt(price)}원`);
   } catch(_) {
-    toast(`${e.name} 시세 조회 실패 (${e.ticker})`, 'red');
+    toast(`${e.name} 시세 조회 실패 (${dispTicker(e.ticker)})`, 'red');
   }
 }
 
