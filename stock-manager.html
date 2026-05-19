@@ -1348,10 +1348,10 @@ function dispTicker(ticker) {
   return (ticker || '').replace(/\.(KS|KQ|KN)$/i, '');
 }
 
-// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 영숫자 코드, 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
+// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 영숫자 코드, 1000원 이상 정수, 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
 function fmtPrice(price, ticker) {
   const t = (ticker || '').toUpperCase().trim();
-  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN') || /^[A-Z0-9]{6}$/.test(t)) return fmt(price) + '원';
+  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN') || /^[A-Z0-9]{6}$/.test(t) || price >= 1000) return fmt(Math.round(price)) + '원';
   return (price % 1 === 0 ? fmt(price) : fmtF(price, 2)) + ' USD';
 }
 
@@ -2144,7 +2144,7 @@ function saveEtfTickers() {
 
 // ── 종목코드 인라인 업데이트 ──
 function updateEtfTicker(stock, val) {
-  const code = val.trim().toUpperCase();
+  const code = val.trim().toUpperCase().replace(/\.(KS|KQ|KN)$/i, '');
   if (code) etfTickerMap[stock] = code;
   else      delete etfTickerMap[stock];
   saveEtfTickers();
@@ -4641,7 +4641,7 @@ function renderEtfWatch() {
 
 function addEtfWatch() {
   const name   = document.getElementById('etfw-name').value.trim();
-  const ticker = document.getElementById('etfw-ticker').value.trim().toUpperCase();
+  const ticker = document.getElementById('etfw-ticker').value.trim().toUpperCase().replace(/\.(KS|KQ|KN)$/i, '');
   const price  = parseFloat(document.getElementById('etfw-price').value) || 0;
   const group  = document.getElementById('etfw-group').value;
 
