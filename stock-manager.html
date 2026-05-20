@@ -1309,6 +1309,8 @@ let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]'
 let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
 // 종목명 → Yahoo Finance 종목코드 매핑 (전 계좌 공유)
 let etfTickerMap    = JSON.parse(localStorage.getItem('sm-etf-tickers')  || '{}');
+let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
+let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
 
 // ── 구데이터 마이그레이션: etfTickerMap에서 .KS/.KQ/.KN 접미사 제거 ──
 (function migrateEtfTickers() {
@@ -5126,9 +5128,6 @@ async function fetchWatchlistKiwoom() {
 // ══════════════════════════════════════════════════════
 // 텔레그램 알림
 // ══════════════════════════════════════════════════════
-
-let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
-let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
 
 function loadTelegramSettingsUI() {
   const tokenEl  = document.getElementById('tg-token');
