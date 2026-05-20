@@ -872,6 +872,7 @@
     <span id="w-count" style="font-size:12px;color:var(--muted)"></span>
     <button id="watchlist-fetch-btn" class="btn btn-primary btn-sm no-print" onclick="fetchWatchlistPrices()">🔄 전체 시세 가져오기</button>
     <button id="watchlist-kiwoom-btn" class="btn btn-ghost btn-sm no-print" onclick="fetchWatchlistKiwoom()">🏦 키움 시세</button>
+    <button id="sse-status-btn" class="btn btn-ghost btn-sm no-print" onclick="startRealtimeSSE()" title="실시간 연결 (클릭: 재연결)">⚫ 실시간</button>
   </div>
   <div class="wc-list" id="w-grid"></div>
 </div>
@@ -1092,7 +1093,7 @@
       <div class="form-group">
         <label>종목코드</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="etfw-ticker" placeholder="예: 069500.KS" style="flex:1"
+          <input type="text" id="etfw-ticker" placeholder="예: 069500" style="flex:1"
             onkeydown="if(event.key==='Enter'){event.preventDefault();searchEtfWatchTicker()}">
           <button type="button" id="etfw-ticker-search-btn" class="btn btn-ghost btn-sm"
             onclick="searchEtfWatchTicker()" title="Yahoo Finance에서 ETF명·현재가 자동 조회">🔍 조회</button>
@@ -1308,6 +1309,30 @@ let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]'
 let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
 // 종목명 → Yahoo Finance 종목코드 매핑 (전 계좌 공유)
 let etfTickerMap    = JSON.parse(localStorage.getItem('sm-etf-tickers')  || '{}');
+let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
+let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
+
+// ── 구데이터 마이그레이션: etfTickerMap에서 .KS/.KQ/.KN 접미사 제거 ──
+(function migrateEtfTickers() {
+  let changed = false;
+  Object.keys(etfTickerMap).forEach(k => {
+    const cleaned = (etfTickerMap[k] || '').replace(/\.(KS|KQ|KN)$/i, '');
+    if (cleaned !== etfTickerMap[k]) { etfTickerMap[k] = cleaned; changed = true; }
+  });
+  if (changed) localStorage.setItem('sm-etf-tickers', JSON.stringify(etfTickerMap));
+})();
+
+// ── 구데이터 마이그레이션: ETF관찰 e.ticker에서 .KS/.KQ/.KN 접미사 제거 ──
+(function migrateEtfWatchlistTickers() {
+  let changed = false;
+  etfWatchlist.forEach(e => {
+    if (e.ticker) {
+      const cleaned = e.ticker.replace(/\.(KS|KQ|KN)$/i, '');
+      if (cleaned !== e.ticker) { e.ticker = cleaned; changed = true; }
+    }
+  });
+  if (changed) localStorage.setItem('sm-etfwatchlist', JSON.stringify(etfWatchlist));
+})();
 
 
 const save = (key, data) => localStorage.setItem('sm-' + key, JSON.stringify(data));
@@ -1343,10 +1368,18 @@ const cc    = n => n > 0 ? 'text-green' : n < 0 ? 'text-red' : 'text-muted';
 const sign  = n => n > 0 ? '+' : '';
 const today = () => new Date().toISOString().slice(0, 10);
 
-// 통화 인식 가격 포맷: .KS/.KQ/.KN 또는 티커 없음 → 원화 정수, 그 외 → USD 소수 2자리
+// 화면 표시용 종목코드: .KS/.KQ/.KN 접미사 제거
+function dispTicker(ticker) {
+  return (ticker || '').replace(/\.(KS|KQ|KN)$/i, '');
+}
+
+// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 숫자코드, 1000원 이상 정수 → 원화, 그 외 → USD
 function fmtPrice(price, ticker) {
   const t = (ticker || '').toUpperCase().trim();
-  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')) return fmt(price) + '원';
+  // 한국 주식: .KS/.KQ/.KN 접미사, 또는 6자리 숫자코드(한국 종목코드), 또는 가격>=1000(원화)
+  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')
+      || /^[0-9]{6}$/.test(t) || /^[A-Z0-9]{6}$/.test(t) || price >= 1000)
+    return fmt(Math.round(price)) + '원';
   return (price % 1 === 0 ? fmt(price) : fmtF(price, 2)) + ' USD';
 }
 
@@ -1688,8 +1721,8 @@ function renderPortfolio() {
           <div style="margin-top:4px;display:flex;align-items:center;gap:4px">
             <input type="text" inputmode="text" autocomplete="off" spellcheck="false"
               class="cur-input" style="width:110px;font-size:11px;padding:3px 6px;text-align:left;color:var(--muted)"
-              value="${resolveTickerCode(r.stock)}"
-              placeholder="종목코드 (예: 005930.KS)"
+              value="${dispTicker(resolveTickerCode(r.stock))}"
+              placeholder="종목코드 (예: 005930)"
               onchange="updateEtfTicker('${r.stock}',this.value)"
               title="Yahoo Finance 종목코드. 한국 주식은 6자리숫자.KS 형식">
           </div>
@@ -2139,7 +2172,7 @@ function saveEtfTickers() {
 
 // ── 종목코드 인라인 업데이트 ──
 function updateEtfTicker(stock, val) {
-  const code = val.trim().toUpperCase();
+  const code = val.trim().toUpperCase().replace(/\.(KS|KQ|KN)$/i, '');
   if (code) etfTickerMap[stock] = code;
   else      delete etfTickerMap[stock];
   saveEtfTickers();
@@ -2150,8 +2183,12 @@ function resolveTickerCode(stock) {
   return etfTickerMap[stock] || '';
 }
 
-// ── Yahoo Finance API로 현재가 일괄 조회 ──
+// ── ETF 탭 현재가 일괄 조회 (키움 API) ──
 async function fetchEtfPrices(acctId) {
+  if (!kiwoomSettings.token) {
+    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
+  }
+
   const hMap    = calcEtfH(acctId);
   const holdings = Object.entries(hMap).filter(([,h]) => h.qty > 0.0001).map(([s]) => s);
   const targets  = holdings.filter(s => resolveTickerCode(s));
@@ -2163,56 +2200,51 @@ async function fetchEtfPrices(acctId) {
   const btn = document.getElementById('etf-fetch-btn-' + acctId);
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
 
-  let ok = 0, successList = [], fail = [];
+  let successList = [], retryQueue = [];
   for (const stock of targets) {
     const ticker = resolveTickerCode(stock);
+    const kiwoomCode = _toKiwoomCode(ticker);
     try {
-      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d&_=${Date.now()}`;
-      const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-      const res  = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const meta = json?.chart?.result?.[0]?.meta;
-      if (!meta) throw new Error('데이터 없음');
-
-      // ── 디버그 로그 ──
-      console.group(`[시세조회] ${stock} (${ticker})`);
-      console.log('조회 URL:', yahooUrl);
-      console.log('regularMarketPrice :', meta.regularMarketPrice);
-      console.log('regularMarketPreviousClose:', meta.regularMarketPreviousClose);
-      console.log('chartPreviousClose  :', meta.chartPreviousClose);
-      console.log('previousClose       :', meta.previousClose);
-      console.log('currency            :', meta.currency);
-      console.log('exchangeName        :', meta.exchangeName);
-      console.log('symbol              :', meta.symbol);
-      console.log('full meta           :', meta);
-      console.groupEnd();
-
-      const price = meta.regularMarketPrice;
-      if (!price) throw new Error('가격 없음');
-
-      // 해당 종목을 보유한 모든 계좌에 현재가 반영
-      ETF_ACCOUNTS.forEach(a => {
-        if (!etfAcctD[a.id][stock]) etfAcctD[a.id][stock] = {};
-        etfAcctD[a.id][stock].cur = price;
-        saveEtfD(a.id);
-      });
-      ok++;
-      successList.push({ stock, ticker, price });
+      if (!kiwoomCode) throw new Error('종목코드 변환 실패');
+      const price = await _kiwoomPrice(kiwoomCode);
+      if (!etfAcctD[acctId][stock]) etfAcctD[acctId][stock] = {};
+      etfAcctD[acctId][stock].cur = price;
+      saveEtfD(acctId);
+      successList.push({ stock, ticker: kiwoomCode, price });
     } catch(e) {
-      fail.push({ stock, ticker });
+      retryQueue.push({ stock, ticker: resolveTickerCode(stock), kiwoomCode: kiwoomCode || null });
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  // 실패 종목 재시도 (2초 대기 후 1회)
+  let fail = [];
+  if (retryQueue.length) {
+    if (btn) btn.textContent = '⏳ 재시도 중...';
+    await new Promise(r => setTimeout(r, 2000));
+    for (const { stock, ticker, kiwoomCode } of retryQueue) {
+      try {
+        if (!kiwoomCode) throw new Error('종목코드 변환 실패');
+        const price = await _kiwoomPrice(kiwoomCode);
+        if (!etfAcctD[acctId][stock]) etfAcctD[acctId][stock] = {};
+        etfAcctD[acctId][stock].cur = price;
+        saveEtfD(acctId);
+        successList.push({ stock, ticker: kiwoomCode, price });
+      } catch(e) {
+        fail.push({ stock, ticker: kiwoomCode || ticker });
+      }
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 
   if (btn) { btn.disabled = false; btn.textContent = '🔄 시세 가져오기'; }
 
-  // 화면 갱신
   renderEtfAcctTab(acctId);
   renderEtfAllSummary();
   const openWrap = document.getElementById('etf-holdings-wrap');
   if (openWrap && openWrap.style.display !== 'none') renderEtfHoldingsTable();
 
-  showPriceResultModal(successList, fail);
+  showPriceResultModal(successList, fail, true);
 }
 
 // ── 포트폴리오 탭 현재가 일괄 조회 ──
@@ -2533,7 +2565,7 @@ function renderEtfAcctTab(acctId) {
           <button class="btn btn-orange btn-sm no-print" onclick="exportEtfCSV('${acctId}')">📥 CSV</button>
         </div>
       </div>
-      <div class="info-note info-note-blue" style="margin-bottom:10px;font-size:12px">종목코드 입력 후 <strong>시세 가져오기</strong>를 누르면 Yahoo Finance에서 현재가를 자동으로 불러옵니다. (예: KODEX 미국성장커버드콜액티브 → <code>449450.KS</code>)</div>
+      <div class="info-note info-note-blue" style="margin-bottom:10px;font-size:12px">종목코드 입력 후 <strong>시세 가져오기</strong>를 누르면 키움 API에서 현재가를 자동으로 불러옵니다. (예: KODEX 미국성장커버드콜액티브 → <code>449450</code>)</div>
       <div class="table-wrap"><table>
         <thead><tr>
           <th>ETF명 / 종목코드</th><th class="text-right">수량</th><th class="text-right">평균단가</th>
@@ -2548,10 +2580,10 @@ function renderEtfAcctTab(acctId) {
               <div style="margin-top:4px;display:flex;align-items:center;gap:4px">
                 <input type="text" inputmode="text" autocomplete="off" spellcheck="false"
                   class="cur-input" style="width:110px;font-size:11px;padding:3px 6px;text-align:left;color:var(--muted)"
-                  value="${resolveTickerCode(r.stock)}"
-                  placeholder="종목코드 (예: 449450.KS)"
+                  value="${dispTicker(resolveTickerCode(r.stock))}"
+                  placeholder="종목코드 (예: 449450)"
                   onchange="updateEtfTicker('${r.stock}',this.value)"
-                  title="Yahoo Finance 종목코드. 한국ETF는 숫자6자리.KS 형식">
+                  title="종목코드 6자리 (예: 449450)">
               </div>
             </td>
             <td class="text-right">${fmt(r.h.qty)}주</td>
@@ -3355,7 +3387,7 @@ function renderWatchlist() {
         <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
         <div class="wc-info">
           <span class="wc-name" title="${ea(w.stock)}">${eh(w.stock)}</span>
-          <span class="wc-tkr">${eh(w.ticker||'—')}</span>
+          <span class="wc-tkr">${eh(dispTicker(w.ticker)||'—')}</span>
           ${groupBadge}
         </div>
         <div class="wc-prices">
@@ -4174,7 +4206,7 @@ function toast(msg, color='blue', duration=10000) {
 }
 
 // ── 시세 조회 결과 팝업 ──
-function showPriceResultModal(successList, fail) {
+function showPriceResultModal(successList, fail, krw = false) {
   const existing = document.getElementById('price-result-modal');
   if (existing) existing.remove();
 
@@ -4189,8 +4221,8 @@ function showPriceResultModal(successList, fail) {
     `<li style="padding:4px 0;border-bottom:1px solid var(--border);font-size:13px">
        <span style="color:var(--green);margin-right:6px">✅</span>
        <strong>${stock}</strong>
-       <span style="color:var(--muted);font-size:11px;margin-left:4px">${ticker}</span>
-       <span style="float:right;font-weight:600">${fmtPrice(price, ticker)}</span>
+       <span style="color:var(--muted);font-size:11px;margin-left:4px">${dispTicker(ticker)}</span>
+       <span style="float:right;font-weight:600">${krw ? fmt(Math.round(price)) + '원' : fmtPrice(price, ticker)}</span>
      </li>`
   ).join('');
 
@@ -4618,7 +4650,7 @@ function renderEtfWatch() {
         <span class="wc-dot" style="background:${groupColor};box-shadow:0 0 6px ${groupColor};flex-shrink:0;width:10px;height:10px;border-radius:50%" title="${ETFW_GROUP_LABEL[e.group]||''}"></span>
         <div class="wc-info">
           <span class="wc-name" title="${ea(e.name)}">${eh(e.name)}</span>
-          <span class="wc-tkr">${eh(e.ticker||'—')}</span>
+          <span class="wc-tkr">${eh(dispTicker(e.ticker)||'—')}</span>
         </div>
         <div class="wc-prices">
           <span class="wc-cur">${e.price ? fmt(e.price)+'원' : '—'}</span>
@@ -4637,7 +4669,7 @@ function renderEtfWatch() {
 
 function addEtfWatch() {
   const name   = document.getElementById('etfw-name').value.trim();
-  const ticker = document.getElementById('etfw-ticker').value.trim().toUpperCase();
+  const ticker = document.getElementById('etfw-ticker').value.trim().toUpperCase().replace(/\.(KS|KQ|KN)$/i, '');
   const price  = parseFloat(document.getElementById('etfw-price').value) || 0;
   const group  = document.getElementById('etfw-group').value;
 
@@ -4747,7 +4779,7 @@ async function fetchSingleEtfWatchPrice(id) {
     renderEtfWatch();
     toast(`${e.name} 현재가 업데이트: ${fmt(price)}원`);
   } catch(_) {
-    toast(`${e.name} 시세 조회 실패 (${e.ticker})`, 'red');
+    toast(`${e.name} 시세 조회 실패 (${dispTicker(e.ticker)})`, 'red');
   }
 }
 
@@ -4846,21 +4878,22 @@ async function searchEtfWatchTicker() {
 }
 
 async function fetchAllEtfWatchPrices() {
+  if (!kiwoomSettings.token) {
+    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
+  }
+
   const targets = etfWatchlist.filter(e => e.ticker);
   if (!targets.length) { toast('종목코드가 없습니다.', 'red'); return; }
+
   let ok = 0, fail = 0;
   for (const e of targets) {
+    const kiwoomCode = _toKiwoomCode(e.ticker);
     try {
-      const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(e.ticker)}?interval=1d&range=1d&_=${Date.now()}`;
-      const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-      const res  = await fetch(url);
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (!price) throw new Error();
-      e.price = price; ok++;
+      if (!kiwoomCode) throw new Error('종목코드 변환 실패');
+      e.price = await _kiwoomPrice(kiwoomCode);
+      ok++;
     } catch(_) { fail++; }
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 1000));
   }
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
@@ -4896,8 +4929,8 @@ function _updateKiwoomStatus() {
   const proxy = kiwoomSettings.proxyUrl
     ? `<span style="color:var(--blue);margin-left:8px">🖥️ 프록시: ${kiwoomSettings.proxyUrl}</span>`
     : '<span style="color:var(--muted);margin-left:8px">(프록시 미설정 — 직접 호출)</span>';
-  if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) {
-    const exp = new Date(kiwoomToken.expires_at).toLocaleString('ko-KR');
+  if (kiwoomToken.access_token || kiwoomSettings.token) {
+    const exp = kiwoomToken.expires_at ? new Date(kiwoomToken.expires_at).toLocaleString('ko-KR') : '만료일 미확인';
     el.innerHTML = `<span style="color:var(--green)">✅ 토큰 유효 — 만료: ${exp}</span>${proxy}`;
   } else {
     el.innerHTML = `<span style="color:var(--yellow)">⚠️ 토큰 없음 또는 만료 — 토큰 발급 버튼을 클릭하세요.</span>${proxy}`;
@@ -4909,7 +4942,7 @@ function saveKiwoomSettings() {
   const secretkey = document.getElementById('kw-appsecret').value.trim();
   const proxyUrl  = document.getElementById('kw-proxy').value.trim().replace(/\/$/, '');
   if (!appkey || !secretkey) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
-  kiwoomSettings = { appkey, secretkey, ...(proxyUrl && { proxyUrl }) };
+  kiwoomSettings = { appkey, secretkey, ...(proxyUrl && { proxyUrl }), ...(kiwoomSettings.token && { token: kiwoomSettings.token }) };
   localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
   _updateKiwoomStatus();
   toast('키움 API 설정이 저장되었습니다.', 'green');
@@ -4968,6 +5001,8 @@ async function issueKiwoomToken() {
       expires_at:   Date.now() + expiresIn * 1000
     };
     localStorage.setItem('sm-kiwoom-token', JSON.stringify(kiwoomToken));
+    kiwoomSettings.token = token;
+    localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
     _updateKiwoomStatus();
     toast('키움 액세스 토큰이 발급되었습니다.', 'green');
     return true;
@@ -4982,23 +5017,23 @@ async function issueKiwoomToken() {
 
 // ── 토큰 유효성 보장 (만료 시 자동 재발급) ──
 async function _ensureKiwoomToken() {
-  if (kiwoomToken.access_token && Date.now() < (kiwoomToken.expires_at || 0)) return true;
+  if (kiwoomToken.access_token || kiwoomSettings.token) return true;
   return issueKiwoomToken();
 }
 
-// ── 6자리 종목코드 추출 (005930.KS → 005930) ──
+// ── 6자리 종목코드 추출 (005930.KS → 005930, 0144L0.KS → 0144L0) ──
 function _toKiwoomCode(ticker) {
   if (!ticker) return null;
-  const m = (ticker + '').match(/^(\d{6})\.(KS|KQ|KN)$/i);
-  if (m) return m[1];
-  if (/^\d{6}$/.test(ticker)) return ticker;
+  const m = (ticker + '').match(/^([A-Z0-9]{6})\.(KS|KQ|KN)$/i);
+  if (m) return m[1].toUpperCase();
+  if (/^[A-Z0-9]{6}$/i.test(ticker)) return ticker.toUpperCase();
   return null;
 }
 
 // ── 단일 종목 현재가 조회 ──
 async function _kiwoomPrice(stockCode) {
   const headers = {
-    'authorization': `Bearer ${kiwoomToken.access_token}`,
+    'authorization': `Bearer ${kiwoomSettings.token}`,
     'api-id':        'ka10095',
     'Content-Type':  'application/json'
   };
@@ -5055,7 +5090,7 @@ async function fetchPortfolioKiwoom() {
 
   if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
   renderPortfolio();  // checkPortfolioAlerts는 renderPortfolio 내에서 자동 호출됨
-  showPriceResultModal(successList, fail);
+  showPriceResultModal(successList, fail, true);
 }
 
 // ── 관심종목 키움 시세 조회 ──
@@ -5077,7 +5112,7 @@ async function fetchWatchlistKiwoom() {
     try {
       const price = await _kiwoomPrice(code);
       w.price = price;
-      successList.push({ stock: w.stock, ticker: code, price });
+      successList.push({ stock: w.stock, ticker: w.ticker, price });
     } catch(e) {
       fail.push({ stock: w.stock, ticker: code });
     }
@@ -5087,15 +5122,12 @@ async function fetchWatchlistKiwoom() {
   save('watchlist', watchlist);
   if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
   renderWatchlist();
-  showPriceResultModal(successList, fail);
+  showPriceResultModal(successList, fail, true);
 }
 
 // ══════════════════════════════════════════════════════
 // 텔레그램 알림
 // ══════════════════════════════════════════════════════
-
-let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
-let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
 
 function loadTelegramSettingsUI() {
   const tokenEl  = document.getElementById('tg-token');
@@ -5232,6 +5264,160 @@ async function checkPortfolioAlerts(rows) {
   }
   _saveTgSent();
 }
+
+// ══════════════════════════════════════════════════════
+// ★ 실시간 SSE 연동 (맥미니 proxy → 웹앱 자동 업데이트)
+// ══════════════════════════════════════════════════════
+let _sseSource = null;
+let _sseRetryCount = 0;
+let _sseConnected = false;
+
+function startRealtimeSSE() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return; // 프록시 설정 없으면 스킵
+
+  if (_sseSource) { _sseSource.close(); _sseSource = null; }
+
+  try {
+    _sseSource = new EventSource(`${proxyUrl}/sse`);
+
+    _sseSource.onopen = () => {
+      _sseConnected = true;
+      _sseRetryCount = 0;
+      updateSSEStatus(true);
+      console.log('✅ 실시간 SSE 연결');
+      // 관심종목 종목코드 등록
+      registerWatchlistToSSE();
+    };
+
+    _sseSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+
+        // 초기 가격 일괄 업데이트
+        if (data.type === 'init' && data.prices) {
+          Object.entries(data.prices).forEach(([code, info]) => {
+            updateWatchlistPrice(code, info.price, info.change);
+          });
+        }
+
+        // 개별 종목 실시간 업데이트 (0B)
+        if (data.type === 'stock' && data.code && data.price) {
+          updateWatchlistPrice(data.code, data.price, data.change);
+        }
+
+        // 지수 실시간 업데이트 (KOSPI/KOSDAQ)
+        if (data.type === 'index' && data.code && data.price) {
+          updateIndexDisplay(data.code, data.price, data.change);
+        }
+      } catch(err) {
+        console.log('SSE 파싱 오류:', err.message);
+      }
+    };
+
+    _sseSource.onerror = () => {
+      _sseConnected = false;
+      updateSSEStatus(false);
+      _sseSource.close();
+      _sseSource = null;
+      _sseRetryCount++;
+      const delay = Math.min(3000 * _sseRetryCount, 30000);
+      console.log(`SSE 연결 끊김, ${delay/1000}초 후 재연결...`);
+      setTimeout(startRealtimeSSE, delay);
+    };
+  } catch(err) {
+    console.log('SSE 시작 오류:', err.message);
+  }
+}
+
+// 관심종목 종목코드를 proxy에 등록
+async function registerWatchlistToSSE() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+
+  const codes = watchlist
+    .map(w => _toKiwoomCode(w.ticker))
+    .filter(Boolean);
+
+  if (codes.length === 0) return;
+
+  try {
+    await fetch(`${proxyUrl}/ws/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: codes, type: '0B' })
+    });
+    console.log(`📡 실시간 등록: ${codes.join(', ')}`);
+  } catch(err) {
+    console.log('종목 등록 실패:', err.message);
+  }
+}
+
+// 관심종목 가격 실시간 업데이트
+function updateWatchlistPrice(code, price, change) {
+  let updated = false;
+  watchlist.forEach(w => {
+    const wCode = _toKiwoomCode(w.ticker);
+    if (wCode === code) {
+      w.price = price;
+      w.priceChange = change;
+      updated = true;
+    }
+  });
+  // 포트폴리오 현재가도 업데이트
+  Object.keys(portfolioMeta).forEach(stock => {
+    const ticker = etfTickerMap[stock] || '';
+    const sCode = _toKiwoomCode(ticker);
+    if (sCode === code) {
+      portfolioMeta[stock].cur = price;
+    }
+  });
+  if (updated) {
+    // 현재 관심종목 탭이면 화면 갱신
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab && activeTab.textContent.includes('관심')) {
+      renderWatchlist();
+    }
+    renderPortfolio();
+    // 실시간 가격 표시 업데이트 (개별 카드)
+    const priceEls = document.querySelectorAll(`[data-realtime-code="${code}"]`);
+    priceEls.forEach(el => {
+      el.textContent = fmt(Math.round(price)) + '원';
+      el.style.color = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : '';
+    });
+  }
+}
+
+// KOSPI/KOSDAQ 지수 표시 업데이트
+function updateIndexDisplay(code, price, change) {
+  const name = code === '0001' ? 'KOSPI' : 'KOSDAQ';
+  console.log(`📊 ${name}: ${price.toLocaleString()} (${change > 0 ? '+' : ''}${change}%)`);
+  // 장시간 알림 탭 등 지수 표시하는 곳 업데이트
+  const kospiEl = document.getElementById('realtime-kospi');
+  const kosdaqEl = document.getElementById('realtime-kosdaq');
+  if (code === '0001' && kospiEl) {
+    kospiEl.textContent = price.toLocaleString();
+  }
+  if (code === '1001' && kosdaqEl) {
+    kosdaqEl.textContent = price.toLocaleString();
+  }
+}
+
+// SSE 연결 상태 표시
+function updateSSEStatus(connected) {
+  const btn = document.getElementById('sse-status-btn');
+  if (btn) {
+    btn.textContent = connected ? '🟢 실시간' : '⚫ 실시간';
+    btn.title = connected ? '실시간 연결됨 (클릭: 재연결)' : '실시간 연결 끊김 (클릭: 재연결)';
+  }
+}
+
+// 페이지 로드 시 자동 SSE 연결 시작
+setTimeout(() => {
+  if (kiwoomSettings.proxyUrl) {
+    startRealtimeSSE();
+  }
+}, 1000);
 </script>
 </body>
 </html>
