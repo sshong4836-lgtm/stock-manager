@@ -872,6 +872,7 @@
     <span id="w-count" style="font-size:12px;color:var(--muted)"></span>
     <button id="watchlist-fetch-btn" class="btn btn-primary btn-sm no-print" onclick="fetchWatchlistPrices()">🔄 전체 시세 가져오기</button>
     <button id="watchlist-kiwoom-btn" class="btn btn-ghost btn-sm no-print" onclick="fetchWatchlistKiwoom()">🏦 키움 시세</button>
+    <button id="sse-status-btn" class="btn btn-ghost btn-sm no-print" onclick="startRealtimeSSE()" title="실시간 연결 (클릭: 재연결)">⚫ 실시간</button>
   </div>
   <div class="wc-list" id="w-grid"></div>
 </div>
@@ -5264,6 +5265,160 @@ async function checkPortfolioAlerts(rows) {
   }
   _saveTgSent();
 }
+
+// ══════════════════════════════════════════════════════
+// ★ 실시간 SSE 연동 (맥미니 proxy → 웹앱 자동 업데이트)
+// ══════════════════════════════════════════════════════
+let _sseSource = null;
+let _sseRetryCount = 0;
+let _sseConnected = false;
+
+function startRealtimeSSE() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return; // 프록시 설정 없으면 스킵
+
+  if (_sseSource) { _sseSource.close(); _sseSource = null; }
+
+  try {
+    _sseSource = new EventSource(`${proxyUrl}/sse`);
+
+    _sseSource.onopen = () => {
+      _sseConnected = true;
+      _sseRetryCount = 0;
+      updateSSEStatus(true);
+      console.log('✅ 실시간 SSE 연결');
+      // 관심종목 종목코드 등록
+      registerWatchlistToSSE();
+    };
+
+    _sseSource.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+
+        // 초기 가격 일괄 업데이트
+        if (data.type === 'init' && data.prices) {
+          Object.entries(data.prices).forEach(([code, info]) => {
+            updateWatchlistPrice(code, info.price, info.change);
+          });
+        }
+
+        // 개별 종목 실시간 업데이트 (0B)
+        if (data.type === 'stock' && data.code && data.price) {
+          updateWatchlistPrice(data.code, data.price, data.change);
+        }
+
+        // 지수 실시간 업데이트 (KOSPI/KOSDAQ)
+        if (data.type === 'index' && data.code && data.price) {
+          updateIndexDisplay(data.code, data.price, data.change);
+        }
+      } catch(err) {
+        console.log('SSE 파싱 오류:', err.message);
+      }
+    };
+
+    _sseSource.onerror = () => {
+      _sseConnected = false;
+      updateSSEStatus(false);
+      _sseSource.close();
+      _sseSource = null;
+      _sseRetryCount++;
+      const delay = Math.min(3000 * _sseRetryCount, 30000);
+      console.log(`SSE 연결 끊김, ${delay/1000}초 후 재연결...`);
+      setTimeout(startRealtimeSSE, delay);
+    };
+  } catch(err) {
+    console.log('SSE 시작 오류:', err.message);
+  }
+}
+
+// 관심종목 종목코드를 proxy에 등록
+async function registerWatchlistToSSE() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+
+  const codes = watchlist
+    .map(w => _toKiwoomCode(w.ticker))
+    .filter(Boolean);
+
+  if (codes.length === 0) return;
+
+  try {
+    await fetch(`${proxyUrl}/ws/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: codes, type: '0B' })
+    });
+    console.log(`📡 실시간 등록: ${codes.join(', ')}`);
+  } catch(err) {
+    console.log('종목 등록 실패:', err.message);
+  }
+}
+
+// 관심종목 가격 실시간 업데이트
+function updateWatchlistPrice(code, price, change) {
+  let updated = false;
+  watchlist.forEach(w => {
+    const wCode = _toKiwoomCode(w.ticker);
+    if (wCode === code) {
+      w.price = price;
+      w.priceChange = change;
+      updated = true;
+    }
+  });
+  // 포트폴리오 현재가도 업데이트
+  Object.keys(portfolioMeta).forEach(stock => {
+    const ticker = etfTickerMap[stock] || '';
+    const sCode = _toKiwoomCode(ticker);
+    if (sCode === code) {
+      portfolioMeta[stock].cur = price;
+    }
+  });
+  if (updated) {
+    // 현재 관심종목 탭이면 화면 갱신
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab && activeTab.textContent.includes('관심')) {
+      renderWatchlist();
+    }
+    renderPortfolio();
+    // 실시간 가격 표시 업데이트 (개별 카드)
+    const priceEls = document.querySelectorAll(`[data-realtime-code="${code}"]`);
+    priceEls.forEach(el => {
+      el.textContent = fmt(Math.round(price)) + '원';
+      el.style.color = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : '';
+    });
+  }
+}
+
+// KOSPI/KOSDAQ 지수 표시 업데이트
+function updateIndexDisplay(code, price, change) {
+  const name = code === '0001' ? 'KOSPI' : 'KOSDAQ';
+  console.log(`📊 ${name}: ${price.toLocaleString()} (${change > 0 ? '+' : ''}${change}%)`);
+  // 장시간 알림 탭 등 지수 표시하는 곳 업데이트
+  const kospiEl = document.getElementById('realtime-kospi');
+  const kosdaqEl = document.getElementById('realtime-kosdaq');
+  if (code === '0001' && kospiEl) {
+    kospiEl.textContent = price.toLocaleString();
+  }
+  if (code === '1001' && kosdaqEl) {
+    kosdaqEl.textContent = price.toLocaleString();
+  }
+}
+
+// SSE 연결 상태 표시
+function updateSSEStatus(connected) {
+  const btn = document.getElementById('sse-status-btn');
+  if (btn) {
+    btn.textContent = connected ? '🟢 실시간' : '⚫ 실시간';
+    btn.title = connected ? '실시간 연결됨 (클릭: 재연결)' : '실시간 연결 끊김 (클릭: 재연결)';
+  }
+}
+
+// 페이지 로드 시 자동 SSE 연결 시작
+setTimeout(() => {
+  if (kiwoomSettings.proxyUrl) {
+    startRealtimeSSE();
+  }
+}, 1000);
 </script>
 </body>
 </html>
