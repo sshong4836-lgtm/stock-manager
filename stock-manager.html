@@ -1335,7 +1335,10 @@ let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
 })();
 
 
-const save = (key, data) => localStorage.setItem('sm-' + key, JSON.stringify(data));
+const save = (key, data) => {
+  localStorage.setItem('sm-' + key, JSON.stringify(data));
+  if (key === 'watchlist' || key === 'etfwatchlist') syncSubscribedCodes();
+};
 
 // ══════════════════════════════════════════════════════
 // 탭 전환
@@ -2168,6 +2171,7 @@ function saveEtfD(acctId) {
 }
 function saveEtfTickers() {
   localStorage.setItem('sm-etf-tickers', JSON.stringify(etfTickerMap));
+  syncSubscribedCodes();
 }
 
 // ── 종목코드 인라인 업데이트 ──
@@ -5429,6 +5433,36 @@ function updateIndexDisplay(code, price, change) {
   }
 }
 
+// 관심종목 + ETF 종목코드를 맥미니 서버에 전송하여 실시간 구독 갱신
+function syncSubscribedCodes() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+
+  const codes = new Set();
+
+  // 관심종목 ticker (한국 6자리 숫자 코드만)
+  watchlist.forEach(w => {
+    const code = String(w.ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
+    if (/^[0-9]{6}$/.test(code)) codes.add(code);
+  });
+
+  // ETF 종목코드 맵 (한국 6자리 숫자 코드만)
+  Object.values(etfTickerMap).forEach(ticker => {
+    const code = String(ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
+    if (/^[0-9]{6}$/.test(code)) codes.add(code);
+  });
+
+  if (codes.size === 0) return;
+
+  fetch(`${proxyUrl}/subscribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ codes: [...codes] })
+  })
+    .then(() => console.log(`📡 구독 동기화: ${[...codes].join(', ')}`))
+    .catch(err => console.log('구독 동기화 실패:', err.message));
+}
+
 // SSE 연결 상태 표시
 function updateSSEStatus(connected) {
   const btn = document.getElementById('sse-status-btn');
@@ -5438,10 +5472,11 @@ function updateSSEStatus(connected) {
   }
 }
 
-// 페이지 로드 시 자동 SSE 연결 시작
+// 페이지 로드 시 자동 SSE 연결 + 구독 목록 전송
 setTimeout(() => {
   if (kiwoomSettings.proxyUrl) {
     startRealtimeSSE();
+    setTimeout(syncSubscribedCodes, 2000);
   }
 }, 1000);
 </script>
