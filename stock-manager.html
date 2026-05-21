@@ -3391,7 +3391,7 @@ function renderWatchlist() {
           ${groupBadge}
         </div>
         <div class="wc-prices">
-          <span class="wc-cur">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
+          <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
           ${(() => {
             if (wGrp !== 'holding') return '';
             const ACCT_COLORS = { 삼성:'var(--orange)', 키움:'var(--blue)', NH:'var(--green)' };
@@ -5306,6 +5306,11 @@ function startRealtimeSSE() {
           updateWatchlistPrice(data.code, data.price, data.change);
         }
 
+        // 새 형식: {"type":"price","item":"005930","price":295750,"change":"+7.25"}
+        if (data.type === 'price' && data.item && data.price != null) {
+          applyPriceUpdate(data.item, data.price, parseFloat(data.change) || 0);
+        }
+
         // 지수 실시간 업데이트 (KOSPI/KOSDAQ)
         if (data.type === 'index' && data.code && data.price) {
           updateIndexDisplay(data.code, data.price, data.change);
@@ -5386,6 +5391,23 @@ function updateWatchlistPrice(code, price, change) {
       el.style.color = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : '';
     });
   }
+}
+
+// SSE price 이벤트 DOM 직접 업데이트 (renderWatchlist 호출 없이 해당 카드만 갱신)
+function applyPriceUpdate(itemCode, price, change) {
+  let updated = false;
+  watchlist.forEach(w => {
+    if (_toKiwoomCode(w.ticker) !== itemCode) return;
+    w.price = price;
+    w.priceChange = change;
+    updated = true;
+    const el = document.querySelector(`.wc-cur[data-wc-id="${w.id}"]`);
+    if (el) {
+      el.textContent = fmtPrice(price, w.ticker);
+      el.style.color = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--blue)';
+    }
+  });
+  if (updated) save('watchlist', watchlist);
 }
 
 // KOSPI/KOSDAQ 지수 표시 업데이트
