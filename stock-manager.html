@@ -5308,7 +5308,7 @@ function startRealtimeSSE() {
 
         // 새 형식: {"type":"price","item":"005930","price":295750,"change":"+7.25"}
         if (data.type === 'price' && data.item && data.price != null) {
-          applyPriceUpdate(data.item, data.price, parseFloat(data.change) || 0);
+          window.applyPriceUpdate(data.item, data.price, parseFloat(data.change) || 0);
         }
 
         // 지수 실시간 업데이트 (KOSPI/KOSDAQ)
@@ -5396,7 +5396,7 @@ function updateWatchlistPrice(code, price, change) {
 // SSE price 이벤트 DOM 직접 업데이트 (renderWatchlist 호출 없이 해당 카드만 갱신)
 // itemCode: SSE에서 오는 6자리 코드 (예: "005930")
 // w.ticker: 웹앱 저장 형식 (예: "005930.KS", "190510.KQ", "005930" 모두 허용)
-function applyPriceUpdate(itemCode, price, change) {
+window.applyPriceUpdate = function(itemCode, price, change) {
   const code = String(itemCode || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
   if (!code) return;
   let updated = false;
@@ -5413,7 +5413,7 @@ function applyPriceUpdate(itemCode, price, change) {
     }
   });
   if (updated) save('watchlist', watchlist);
-}
+};
 
 // KOSPI/KOSDAQ 지수 표시 업데이트
 function updateIndexDisplay(code, price, change) {
