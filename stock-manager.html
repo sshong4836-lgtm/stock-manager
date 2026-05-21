@@ -5397,12 +5397,12 @@ function updateWatchlistPrice(code, price, change) {
 // itemCode: SSE에서 오는 6자리 코드 (예: "005930")
 // w.ticker: 웹앱 저장 형식 (예: "005930.KS", "190510.KQ", "005930" 모두 허용)
 window.applyPriceUpdate = function(itemCode, price, change) {
-  const code = String(itemCode || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
-  if (!code) return;
+  itemCode = String(itemCode || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
+  if (!itemCode) return;
   let updated = false;
   watchlist.forEach(w => {
     const tkr = String(w.ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
-    if (!tkr || tkr !== code) return;
+    if (!tkr || tkr !== itemCode) return;
     w.price = price;
     w.priceChange = change;
     updated = true;
