@@ -5412,7 +5412,6 @@ window.applyPriceUpdate = function(itemCode, price, change) {
       el.style.color = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--blue)';
     }
   });
-  if (updated) save('watchlist', watchlist);
 };
 
 // KOSPI/KOSDAQ 지수 표시 업데이트
