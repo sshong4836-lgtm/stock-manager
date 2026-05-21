@@ -5394,10 +5394,15 @@ function updateWatchlistPrice(code, price, change) {
 }
 
 // SSE price 이벤트 DOM 직접 업데이트 (renderWatchlist 호출 없이 해당 카드만 갱신)
+// itemCode: SSE에서 오는 6자리 코드 (예: "005930")
+// w.ticker: 웹앱 저장 형식 (예: "005930.KS", "190510.KQ", "005930" 모두 허용)
 function applyPriceUpdate(itemCode, price, change) {
+  const code = String(itemCode || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
+  if (!code) return;
   let updated = false;
   watchlist.forEach(w => {
-    if (_toKiwoomCode(w.ticker) !== itemCode) return;
+    const tkr = String(w.ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
+    if (!tkr || tkr !== code) return;
     w.price = price;
     w.priceChange = change;
     updated = true;
