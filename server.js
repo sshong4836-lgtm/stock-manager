@@ -125,7 +125,11 @@ app.get('/sse', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   sseClients.push(res);
   res.write(`data: ${JSON.stringify({ type: 'init', prices: realtimePrices })}\n\n`);
-  req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 30000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients = sseClients.filter(c => c !== res);
+  });
   // SSE 접속 시 WebSocket이 끊겨 있으면 자동 재연결
   if (currentToken && (!kiwoomWs || kiwoomWs.readyState !== WebSocket.OPEN)) {
     console.log('🔄 SSE 접속 감지 → WebSocket 재연결');
