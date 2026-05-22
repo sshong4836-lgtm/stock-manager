@@ -85,8 +85,8 @@ function connectKiwoomWS(token) {
         }
       }
 
-      // 주식체결 실시간 데이터 (H0STCNT0) - 개별종목
-      if (msg.trnm === 'H0STCNT0') {
+      // 주식체결 실시간 데이터 (0B) - 개별종목
+      if (msg.trnm === '0B') {
         const d = msg.data || {};
         const item = d['단축코드'] || d['MKSC_SHRN_ISCD'] || d['stk_cd'];
         const price = Math.abs(parseFloat(d['현재가'] || d['STCK_PRPR'] || d['cur_prc'] || 0));
@@ -96,7 +96,7 @@ function connectKiwoomWS(token) {
           broadcastSSE({ type: 'price', item, price, change });
           console.log(`📈 ${item}: ${price}원 (${change > 0 ? '+' : ''}${change}%)`);
         } else {
-          console.log('📈 H0STCNT0 원본:', JSON.stringify(msg).slice(0, 300));
+          console.log('📈 0B 원본:', JSON.stringify(msg).slice(0, 300));
         }
       }
 
@@ -155,7 +155,7 @@ app.post('/ws/register', (req, res) => {
     trnm: 'REG',
     grp_no: '2',
     refresh: '0',
-    data: [{ item: items, type: items.map(() => type || 'H0STCNT0') }]
+    data: [{ item: items, type: items.map(() => type || '0B') }]
   }));
   res.json({ status: 'ok', registered: items });
 });
@@ -174,7 +174,7 @@ app.post('/subscribe', (req, res) => {
     trnm: 'REG',
     grp_no: '2',
     refresh: '1',
-    data: [{ item: codes, type: codes.map(() => 'H0STCNT0') }]
+    data: [{ item: codes, type: codes.map(() => '0B') }]
   }));
   console.log(`📡 구독 갱신 (${codes.length}종목): ${codes.join(', ')}`);
   res.json({ status: 'ok', subscribed: codes });
