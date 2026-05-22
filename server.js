@@ -123,6 +123,11 @@ app.get('/sse', (req, res) => {
   sseClients.push(res);
   res.write(`data: ${JSON.stringify({ type: 'init', prices: realtimePrices })}\n\n`);
   req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
+  // SSE 접속 시 WebSocket이 끊겨 있으면 자동 재연결
+  if (currentToken && (!kiwoomWs || kiwoomWs.readyState !== WebSocket.OPEN)) {
+    console.log('🔄 SSE 접속 감지 → WebSocket 재연결');
+    connectKiwoomWS(currentToken);
+  }
 });
 
 // WebSocket 수동 시작
