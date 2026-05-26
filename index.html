@@ -2691,8 +2691,8 @@ function renderEtfHoldingsTable() {
 
   document.getElementById('etf-holdings-table').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin:8px 0 4px">
-      <button onclick="etfAutoFetch()" style="background:rgba(88,166,255,.15);color:var(--blue);border:1px solid var(--blue);font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;">
-        📡 자동 가져오기 <span style="font-size:10px;opacity:.7">(맥미니 연동 예정)</span>
+      <button id="etf-nav-all-btn" onclick="etfAutoFetch()" style="background:rgba(88,166,255,.15);color:var(--blue);border:1px solid var(--blue);font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;">
+        📡 전체 NAV 자동 조회
       </button>
     </div>
     <div class="table-wrap" style="margin-top:4px"><table>
@@ -2734,9 +2734,14 @@ function renderEtfHoldingsTable() {
             <td class="text-right" style="white-space:nowrap">${fmt(d.totalQty)}주</td>
             <td class="text-right text-muted" style="white-space:nowrap">${fmt(d.curPrice)}원</td>
             <td class="text-right" style="white-space:nowrap">
-              <input type="number" value="${navVal}" placeholder="입력"
-                onchange="saveEtfExtra('${safeKey}','nav',this.value)"
-                style="width:80px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 8px;font-size:13px;text-align:right">
+              <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
+                <input type="number" value="${navVal}" placeholder="입력"
+                  onchange="saveEtfExtra('${safeKey}','nav',this.value)"
+                  style="width:72px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:13px;text-align:right">
+                <button onclick="fetchEtfNav('${ea(name)}','${safeKey}',this)"
+                  title="키움 API에서 NAV 자동 조회 (ka40009)"
+                  style="background:rgba(88,166,255,.15);color:var(--blue);border:1px solid rgba(88,166,255,.4);border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;flex-shrink:0">📡</button>
+              </div>
             </td>
             <td class="text-right" style="white-space:nowrap">${gapHtml}</td>
             <td class="text-right" style="white-space:nowrap">
@@ -2771,9 +2776,88 @@ function saveEtfExtra(key, field, value) {
   renderEtfHoldingsTable();
 }
 
-// ── ETF 자동 가져오기 (맥미니 연동 예정) ──
-function etfAutoFetch() {
-  alert('📡 맥미니 연동 후 사용 가능합니다!\n\n맥미니 도착 후 pykrx로 자동 연동 예정\n지금은 NAV/추적오차를 직접 입력해주세요 😊');
+// ── ETF NAV 단일 조회 (ka40009) ──
+async function fetchEtfNav(stockName, safeKey, btnEl) {
+  if (!kiwoomSettings.proxyUrl) { toast('설정 탭에서 프록시 URL을 먼저 입력하세요.', 'red'); return; }
+  const ticker = resolveTickerCode(stockName);
+  const kiwoomCode = _toKiwoomCode(ticker);
+  if (!kiwoomCode) {
+    toast(`${stockName}: 종목코드 없음 (ETF탭에서 종목코드 입력 필요)`, 'red');
+    return;
+  }
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳'; }
+  try {
+    const res = await _kiwoomFetch('/api/dostk/etf', {
+      method: 'POST',
+      headers: { 'api-id': 'ka40009', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stk_cd: kiwoomCode })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const arr = json?.etfnavarray;
+    if (!arr?.length) throw new Error(json?.return_msg || 'NAV 데이터 없음');
+    const latest = arr[0];
+    // 실시간 NAV 우선, 없으면 전일 기준가(=전일 NAV)
+    const navRaw = (latest.nav && latest.nav !== '') ? latest.nav : latest.base_pric;
+    const nav = parseFloat(String(navRaw).replace(/^[+-]/, ''));
+    if (!nav || isNaN(nav)) throw new Error('NAV 값 없음');
+    const isRealtime = !!(latest.nav && latest.nav !== '');
+    saveEtfExtra(safeKey, 'nav', nav);
+    toast(`${stockName} NAV: ${fmt(nav)}원 ${isRealtime ? '(실시간)' : '(전일기준)'}`);
+  } catch(err) {
+    console.error('NAV 조회 실패:', stockName, err.message);
+    toast(`${stockName} NAV 조회 실패: ${err.message}`, 'red');
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '📡'; }
+  }
+}
+
+// ── ETF 전체 NAV 자동 조회 ──
+async function etfAutoFetch() {
+  if (!kiwoomSettings.proxyUrl) { toast('설정 탭에서 프록시 URL을 먼저 입력하세요.', 'red'); return; }
+  const btn = document.getElementById('etf-nav-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
+  // 보유 종목 목록 수집
+  const nameSet = new Set();
+  ETF_ACCOUNTS.forEach(acct => {
+    Object.entries(calcEtfH(acct.id)).filter(([,h]) => h.qty > 0.0001).forEach(([stock]) => nameSet.add(stock));
+  });
+  const names = [...nameSet];
+  if (!names.length) {
+    toast('보유 종목이 없습니다.', 'red');
+    if (btn) { btn.disabled = false; btn.textContent = '📡 전체 NAV 자동 조회'; }
+    return;
+  }
+  let ok = 0, fail = 0;
+  for (const name of names) {
+    const safeKey = name.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+    const ticker = resolveTickerCode(name);
+    const kiwoomCode = _toKiwoomCode(ticker);
+    if (!kiwoomCode) { fail++; continue; }
+    try {
+      const res = await _kiwoomFetch('/api/dostk/etf', {
+        method: 'POST',
+        headers: { 'api-id': 'ka40009', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stk_cd: kiwoomCode })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const arr = json?.etfnavarray;
+      if (!arr?.length) throw new Error('NAV 없음');
+      const latest = arr[0];
+      const navRaw = (latest.nav && latest.nav !== '') ? latest.nav : latest.base_pric;
+      const nav = parseFloat(String(navRaw).replace(/^[+-]/, ''));
+      if (!nav || isNaN(nav)) throw new Error('파싱 실패');
+      saveEtfExtra(safeKey, 'nav', nav);
+      ok++;
+    } catch(err) {
+      console.error(name, 'NAV 실패:', err.message);
+      fail++;
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '📡 전체 NAV 자동 조회'; }
+  toast(`NAV 조회 완료: ${ok}건 성공${fail ? ', ' + fail + '건 실패' : ''}`);
 }
 
 // ── 전체 계좌 합산 요약 ──
