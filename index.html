@@ -2738,7 +2738,7 @@ function renderEtfHoldingsTable() {
                 <input type="number" value="${navVal}" placeholder="입력"
                   onchange="saveEtfExtra('${safeKey}','nav',this.value)"
                   style="width:72px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:13px;text-align:right">
-                <button onclick="fetchEtfNav('${ea(name)}','${safeKey}',this)"
+                <button onclick="fetchEtfNav('${escAttr(name)}','${safeKey}',this)"
                   title="키움 API에서 NAV 자동 조회 (ka40009)"
                   style="background:rgba(88,166,255,.15);color:var(--blue);border:1px solid rgba(88,166,255,.4);border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;flex-shrink:0">📡</button>
               </div>
