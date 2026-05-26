@@ -2189,7 +2189,7 @@ function resolveTickerCode(stock) {
 
 // ── ETF 탭 현재가 일괄 조회 (키움 API) ──
 async function fetchEtfPrices(acctId) {
-  if (!kiwoomSettings.token) {
+  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
     toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
   }
 
@@ -4771,17 +4771,12 @@ async function fetchSingleEtfWatchPrice(id) {
   const e = etfWatchlist.find(x => x.id === id);
   if (!e || !e.ticker) return;
   try {
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(e.ticker)}?interval=1d&range=1d&_=${Date.now()}`;
-    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-    const res  = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    const price = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
-    if (!price) throw new Error('가격 없음');
-    e.price = price;
+    const kiwoomCode = _toKiwoomCode(e.ticker);
+    if (!kiwoomCode) throw new Error('종목코드 변환 실패');
+    e.price = await _kiwoomPrice(kiwoomCode);
     save('etfwatchlist', etfWatchlist);
     renderEtfWatch();
-    toast(`${e.name} 현재가 업데이트: ${fmt(price)}원`);
+    toast(`${e.name} 현재가 업데이트: ${fmt(e.price)}원`);
   } catch(_) {
     toast(`${e.name} 시세 조회 실패 (${dispTicker(e.ticker)})`, 'red');
   }
@@ -4882,7 +4877,7 @@ async function searchEtfWatchTicker() {
 }
 
 async function fetchAllEtfWatchPrices() {
-  if (!kiwoomSettings.token) {
+  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
     toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
   }
 

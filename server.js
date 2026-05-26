@@ -204,7 +204,7 @@ app.post('/api/dostk/:path', async (req, res) => {
       headers: {
         'Content-Type': 'application/json;charset=UTF-8',
         'ngrok-skip-browser-warning': '1',
-        'authorization': req.headers['authorization'],
+        'authorization': req.headers['authorization'] || (currentToken ? `Bearer ${currentToken}` : ''),
         'api-id': req.headers['api-id']
       }
     });
