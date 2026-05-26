@@ -5033,8 +5033,10 @@ function _toKiwoomCode(ticker) {
 
 // ── 단일 종목 현재가 조회 ──
 async function _kiwoomPrice(stockCode) {
+  // proxyUrl 사용 시 서버가 자체 토큰으로 처리하므로 authorization 헤더 불필요
+  const useProxy = !!kiwoomSettings.proxyUrl;
   const headers = {
-    ...(kiwoomSettings.token ? { 'authorization': `Bearer ${kiwoomSettings.token}` } : {}),
+    ...(!useProxy && kiwoomSettings.token ? { 'authorization': `Bearer ${kiwoomSettings.token}` } : {}),
     'api-id':        'ka10095',
     'Content-Type':  'application/json'
   };
@@ -5046,7 +5048,7 @@ async function _kiwoomPrice(stockCode) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
   const curPrc = json?.atn_stk_infr?.[0]?.cur_prc;
-  if (!curPrc) throw new Error(json?.msg || '가격 없음');
+  if (!curPrc) throw new Error(json?.return_msg || json?.msg || '가격 없음');
   const price = parseFloat(String(curPrc).replace(/^[+-]/, ''));
   if (isNaN(price)) throw new Error('가격 파싱 오류');
   return price;
