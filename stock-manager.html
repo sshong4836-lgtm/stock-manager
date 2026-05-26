@@ -2215,7 +2215,8 @@ async function fetchEtfPrices(acctId) {
       etfAcctD[acctId][stock].cur = price;
       saveEtfD(acctId);
       successList.push({ stock, ticker: kiwoomCode, price });
-    } catch(e) {
+    } catch(err) {
+      console.error(`${stock} 시세 실패:`, err.message);
       retryQueue.push({ stock, ticker: resolveTickerCode(stock), kiwoomCode: kiwoomCode || null });
     }
     await new Promise(r => setTimeout(r, 1000));
@@ -4777,8 +4778,9 @@ async function fetchSingleEtfWatchPrice(id) {
     save('etfwatchlist', etfWatchlist);
     renderEtfWatch();
     toast(`${e.name} 현재가 업데이트: ${fmt(e.price)}원`);
-  } catch(_) {
-    toast(`${e.name} 시세 조회 실패 (${dispTicker(e.ticker)})`, 'red');
+  } catch(err) {
+    console.error('fetchSingleEtfWatchPrice 실패:', err.message);
+    toast(`${e.name} 시세 조회 실패 (${dispTicker(e.ticker)}): ${err.message}`, 'red');
   }
 }
 
@@ -4891,7 +4893,7 @@ async function fetchAllEtfWatchPrices() {
       if (!kiwoomCode) throw new Error('종목코드 변환 실패');
       e.price = await _kiwoomPrice(kiwoomCode);
       ok++;
-    } catch(_) { fail++; }
+    } catch(err) { console.error(`${e.ticker} 시세 실패:`, err.message); fail++; }
     await new Promise(r => setTimeout(r, 1000));
   }
   save('etfwatchlist', etfWatchlist);
@@ -5032,7 +5034,7 @@ function _toKiwoomCode(ticker) {
 // ── 단일 종목 현재가 조회 ──
 async function _kiwoomPrice(stockCode) {
   const headers = {
-    'authorization': `Bearer ${kiwoomSettings.token}`,
+    ...(kiwoomSettings.token ? { 'authorization': `Bearer ${kiwoomSettings.token}` } : {}),
     'api-id':        'ka10095',
     'Content-Type':  'application/json'
   };
