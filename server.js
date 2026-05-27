@@ -14,6 +14,7 @@ let kiwoomWs = null;
 let currentToken = null;
 let sseClients = [];
 let realtimePrices = {};
+let wsGeneration = 0;
 
 function broadcastSSE(data) {
   const msg = `data: ${JSON.stringify(data)}\n\n`;
@@ -31,6 +32,7 @@ async function getToken() {
 }
 
 function connectKiwoomWS(token) {
+  const myGen = ++wsGeneration;
   if (kiwoomWs) { try { kiwoomWs.terminate(); } catch(e) {} }
   currentToken = token;
   kiwoomWs = new WebSocket('wss://api.kiwoom.com:10000/api/dostk/websocket');
@@ -112,9 +114,22 @@ function connectKiwoomWS(token) {
 
   kiwoomWs.on('error', (err) => console.log('❌ WS 오류:', err.message));
   kiwoomWs.on('close', () => {
+    if (myGen !== wsGeneration) return; // 갱신으로 인한 종료 → 재연결 생략
     console.log('🔌 WS 종료, 10초 후 재연결...');
-    setTimeout(() => connectKiwoomWS(currentToken), 10000);
+    setTimeout(() => { if (myGen === wsGeneration) connectKiwoomWS(currentToken); }, 10000);
   });
+}
+
+async function renewToken() {
+  console.log('🔄 토큰 자동 갱신 시작...');
+  try {
+    const token = await getToken();
+    console.log('✅ 토큰 갱신 성공, WebSocket 재연결');
+    connectKiwoomWS(token);
+  } catch(e) {
+    console.log('❌ 토큰 갱신 실패:', e.message, '→ 1시간 후 재시도');
+    setTimeout(renewToken, 60 * 60 * 1000);
+  }
 }
 
 // SSE 엔드포인트
@@ -220,6 +235,9 @@ app.listen(3000, async () => {
     const token = await getToken();
     console.log('✅ 토큰 발급 성공');
     connectKiwoomWS(token);
+    // 23시간마다 토큰 자동 갱신 + WebSocket 재연결
+    setInterval(renewToken, 23 * 60 * 60 * 1000);
+    console.log('⏰ 토큰 자동 갱신 예약 (23시간 간격)');
   } catch(e) {
     console.log('❌ 토큰 발급 실패:', e.message);
   }
