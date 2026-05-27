@@ -1,0 +1,16 @@
+﻿# 실행파일
+*.exe
+*.msi
+
+# 다운로드 임시파일
+*.crdownload
+*.tmp
+
+# PDF/문서
+*.pdf
+
+# Claude 설정
+.claude/
+
+# 개인 설정
+*.local.json
