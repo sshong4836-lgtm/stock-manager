@@ -3386,6 +3386,20 @@ function setWatchReadyAccountFilter(acct) {
   renderWatchlist();
 }
 
+// portfolioManual에 있는 종목 중 watchlist holding 항목이 없으면 자동 생성 (분석설정 유지용)
+function syncHoldingWatchlistWithPortfolio() {
+  const norm = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
+  let changed = false;
+  portfolioManual.forEach(p => {
+    const exists = watchlist.some(w => norm(w.group) === 'holding' && w.stock === p.stock);
+    if (!exists) {
+      watchlist.push({ id: Date.now() + Math.floor(Math.random() * 9999), stock: p.stock, ticker: '', group: 'holding' });
+      changed = true;
+    }
+  });
+  if (changed) save('watchlist', watchlist);
+}
+
 function updateWatchFormBuyFields() {
   const grp = document.getElementById('w-group').value;
   const disabled = grp !== 'holding' && grp !== 'ready';
@@ -3610,8 +3624,8 @@ function renderWatchlist() {
   const normalizeGroup = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
 
   // 그룹별 카운트 계산 → 탭 버튼 라벨 업데이트
-  const gc = { watch1:0, watch2:0, ready:0, holding:0 };
-  watchlist.forEach(w => { const g = normalizeGroup(w.group); if (gc[g]!==undefined) gc[g]++; });
+  const gc = { watch1:0, watch2:0, ready:0, holding: portfolioManual.length };
+  watchlist.forEach(w => { const g = normalizeGroup(w.group); if (g !== 'holding' && gc[g]!==undefined) gc[g]++; });
   const tabLabels = {
     watch1:  `🔵 관찰1 (${gc.watch1})`,
     watch2:  `🟣 관찰2 (${gc.watch2})`,
@@ -3637,7 +3651,16 @@ function renderWatchlist() {
   }
 
   // 그룹 필터 + 계좌 필터 + 검색어 필터
-  let list = watchlist.filter(w => normalizeGroup(w.group) === _watchGroup);
+  let list;
+  if (_watchGroup === 'holding') {
+    syncHoldingWatchlistWithPortfolio();
+    list = portfolioManual.map(p => {
+      const wItem = watchlist.find(w => normalizeGroup(w.group) === 'holding' && w.stock === p.stock);
+      return wItem ? { ...wItem, _pm: p } : null;
+    }).filter(Boolean);
+  } else {
+    list = watchlist.filter(w => normalizeGroup(w.group) === _watchGroup);
+  }
   if (_watchGroup === 'ready' && _watchReadyAccountFilter !== 'all') {
     list = list.filter(w => (w.account || '삼성') === _watchReadyAccountFilter);
   }
@@ -3647,7 +3670,10 @@ function renderWatchlist() {
 
   document.getElementById('w-count').textContent = `${list.length}개 종목`;
   const container = document.getElementById('w-grid');
-  if (!list.length) { container.innerHTML = '<div class="empty">관심종목이 없습니다.</div>'; return; }
+  if (!list.length) {
+    container.innerHTML = `<div class="empty">${_watchGroup === 'holding' ? '포트폴리오 탭에서 보유종목을 추가하세요.' : '관심종목이 없습니다.'}</div>`;
+    return;
+  }
 
   // 보유종목 카드용: 계좌별 보유 사전 계산
   const WATCH_ACCTS = ['삼성', '키움', 'NH'];
@@ -3760,21 +3786,17 @@ function renderWatchlist() {
               <option value="NH"   ${(w.account||'삼성')==='NH'  ?'selected':''}>NH계좌</option>
             </select>
           </div>` : ''}
-          ${wGrp === 'holding' ? `
+          ${wGrp === 'holding' && w._pm ? `
           <div class="form-group">
-            <label>매수금액 (원/주)</label>
-            <input type="number" value="${ea(w.buyAmount||'')}" placeholder="주당 매수가"
-              onchange="saveWatchField(${w.id},'buyAmount',parseFloat(this.value)||0);renderWatchlist()">
+            <label>수량 <span style="font-size:10px;color:var(--muted)">(포트폴리오)</span></label>
+            <div style="padding:5px 0;font-size:14px;font-weight:600;color:var(--text)">${fmt(w._pm.qty||0)}주</div>
           </div>
           <div class="form-group">
-            <label>수량</label>
-            <input type="number" value="${ea(w.buyQty||'')}" placeholder="0"
-              onchange="saveWatchField(${w.id},'buyQty',parseFloat(this.value)||0);renderWatchlist()">
+            <label>평균단가 <span style="font-size:10px;color:var(--muted)">(포트폴리오)</span></label>
+            <div style="padding:5px 0;font-size:14px;font-weight:600;color:var(--text)">${fmt(Math.round(w._pm.avg||0))}원</div>
           </div>
-          <div class="form-group">
-            <label>매수날짜</label>
-            <input type="date" value="${ea(w.buyDate||'')}"
-              onchange="saveWatchField(${w.id},'buyDate',this.value);renderWatchlist()">
+          <div class="form-group" style="grid-column:1/-1">
+            <div style="background:rgba(255,165,0,.1);border:1px solid rgba(255,165,0,.3);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--muted)">📌 수량/매수가는 <strong>포트폴리오 탭</strong>에서 수정하세요.</div>
           </div>` : ''}
         </div>
         <div class="alert-checks-section">
@@ -3909,14 +3931,21 @@ function renderWatchlist() {
             const journalQty  = acctData.reduce((s, x) => s + x.h.qty, 0);
             const journalCost = acctData.reduce((s, x) => s + x.h.qty * x.h.avg, 0);
             const autoAvg  = journalQty > 0 ? journalCost / journalQty : 0;
-            const buyPrice = autoAvg || w.buyAmount || 0;
-            const totalQty = journalQty || w.buyQty || 0;
+            const pmQty = w._pm?.qty || 0;
+            const pmAvg = w._pm?.avg || 0;
+            const buyPrice = autoAvg || pmAvg || 0;
+            const totalQty = journalQty || pmQty || 0;
+            const pmAccts  = (!acctData.length && w._pm?.accounts?.length) ? w._pm.accounts : [];
             const acctTagsHtml = acctData.length
               ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">${acctData.map(x =>
                   `<span style="background:rgba(240,136,62,.12);color:${ACCT_COLORS[x.a]||'var(--orange)'};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">${x.a}(${fmt(x.h.qty)}주)</span>`
                 ).join('')}</div>`
+              : pmAccts.length
+              ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">${pmAccts.map(a =>
+                  `<span style="background:rgba(240,136,62,.12);color:${ACCT_COLORS[a.name]||'var(--orange)'};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">${a.name}(${fmt(a.qty)}주)</span>`
+                ).join('')}</div>`
               : '';
-            const metaStr = [buyPrice?`평균 ${fmtPrice(buyPrice,w.ticker)}`:'', totalQty?`총 ${fmt(totalQty)}주`:'', w.buyDate||''].filter(Boolean).join(' · ');
+            const metaStr = [buyPrice?`평균 ${fmtPrice(buyPrice,w.ticker)}`:'', totalQty?`총 ${fmt(totalQty)}주`:''].filter(Boolean).join(' · ');
             const pnlHtml = (buyPrice && w.price && totalQty)
               ? (() => {
                   const pct    = (w.price - buyPrice) / buyPrice * 100;
