@@ -522,6 +522,67 @@
       </table>
     </div>
   </div>
+
+  <!-- 보유종목 상세 설정 -->
+  <div class="card">
+    <div class="card-title">📋 보유종목 상세 설정</div>
+    <div class="info-note info-note-blue" style="font-size:12px;margin-bottom:14px">
+      매매일지에 없는 종목을 직접 추가하거나, 계좌별 수량·매수가를 설정합니다.<br>
+      계좌를 선택하면 각 계좌별 수량과 매수가를 입력할 수 있습니다.
+    </div>
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      <div class="form-group">
+        <label>종목명</label>
+        <input type="text" id="p-m-stock" placeholder="예: 삼성전자" list="p-stock-list">
+        <datalist id="p-stock-list"></datalist>
+      </div>
+      <div class="form-group">
+        <label>현재가 (원)</label>
+        <input type="number" id="p-m-cur" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>목표가 (원)</label>
+        <input type="number" id="p-m-target" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>손절가 (원)</label>
+        <input type="number" id="p-m-stop" placeholder="0">
+      </div>
+    </div>
+
+    <!-- 계좌 선택 -->
+    <div style="margin-bottom:12px">
+      <label style="font-size:0.82rem;color:var(--muted);display:block;margin-bottom:8px">계좌 선택 (멀티선택 — 계좌별 수량/매수가 입력)</label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
+          <input type="checkbox" id="p-m-acct-samsung" value="삼성" onchange="updateManualAccountRows()"> 🏦 삼성
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
+          <input type="checkbox" id="p-m-acct-kiwoom" value="키움" onchange="updateManualAccountRows()"> 💙 키움
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
+          <input type="checkbox" id="p-m-acct-nh" value="NH" onchange="updateManualAccountRows()"> 🟢 NH
+        </label>
+      </div>
+    </div>
+
+    <!-- 계좌별 수량/매수가 (동적) -->
+    <div id="p-m-acct-rows"></div>
+
+    <!-- 계좌 미선택 시 단순 입력 -->
+    <div id="p-m-simple-rows" class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+      <div class="form-group">
+        <label>수량 (주)</label>
+        <input type="number" id="p-m-qty" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>평균매수가 (원)</label>
+        <input type="number" id="p-m-avg" placeholder="0">
+      </div>
+    </div>
+
+    <button class="btn btn-success" onclick="addManualPortfolio()" style="margin-top:4px">+ 종목 추가 / 업데이트</button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════
@@ -1622,25 +1683,88 @@ function setPortfolioMeta() {
   toast(`${stock} 설정이 저장되었습니다.`);
 }
 
+const _ACCT_LIST = [
+  { id: 'samsung', name: '삼성', icon: '🏦' },
+  { id: 'kiwoom',  name: '키움', icon: '💙' },
+  { id: 'nh',      name: 'NH',   icon: '🟢' }
+];
+
+function updateManualAccountRows() {
+  const selected = _ACCT_LIST.filter(a => document.getElementById(`p-m-acct-${a.id}`)?.checked);
+  const container  = document.getElementById('p-m-acct-rows');
+  const simpleRows = document.getElementById('p-m-simple-rows');
+  if (selected.length === 0) {
+    container.innerHTML = '';
+    simpleRows.style.display = '';
+    return;
+  }
+  simpleRows.style.display = 'none';
+  container.innerHTML = selected.map(a => `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="min-width:54px;font-size:13px;font-weight:600">${a.icon} ${a.name}</span>
+      <div style="display:flex;align-items:center;gap:4px">
+        <input type="number" id="p-m-acct-qty-${a.name}" placeholder="수량" min="0"
+          style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+        <span style="font-size:12px;color:var(--muted)">주</span>
+      </div>
+      <span style="font-size:12px;color:var(--muted)">@</span>
+      <div style="display:flex;align-items:center;gap:4px">
+        <input type="number" id="p-m-acct-avg-${a.name}" placeholder="매수가" min="0"
+          style="width:110px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px">
+        <span style="font-size:12px;color:var(--muted)">원</span>
+      </div>
+    </div>
+  `).join('');
+}
+
 function addManualPortfolio() {
   const stock  = document.getElementById('p-m-stock').value.trim();
-  const qty    = parseFloat(document.getElementById('p-m-qty').value)    || 0;
-  const avg    = parseFloat(document.getElementById('p-m-avg').value)    || 0;
   const cur    = parseFloat(document.getElementById('p-m-cur').value)    || 0;
   const target = parseFloat(document.getElementById('p-m-target').value) || 0;
   const stop   = parseFloat(document.getElementById('p-m-stop').value)   || 0;
-  if (!stock || !qty || !avg) { toast('종목명, 수량, 평균매수가를 입력하세요.', 'red'); return; }
+  if (!stock) { toast('종목명을 입력하세요.', 'red'); return; }
+
+  const selected = _ACCT_LIST.filter(a => document.getElementById(`p-m-acct-${a.id}`)?.checked);
+  let qty, avg, accounts;
+  if (selected.length > 0) {
+    accounts = selected.map(a => ({
+      name: a.name,
+      qty:  parseFloat(document.getElementById(`p-m-acct-qty-${a.name}`)?.value) || 0,
+      avg:  parseFloat(document.getElementById(`p-m-acct-avg-${a.name}`)?.value) || 0
+    })).filter(a => a.qty > 0);
+    if (!accounts.length) { toast('계좌별 수량을 1주 이상 입력하세요.', 'red'); return; }
+    qty = accounts.reduce((s, a) => s + a.qty, 0);
+    const totalCost = accounts.reduce((s, a) => s + a.qty * a.avg, 0);
+    avg = qty > 0 ? totalCost / qty : 0;
+  } else {
+    qty = parseFloat(document.getElementById('p-m-qty').value) || 0;
+    avg = parseFloat(document.getElementById('p-m-avg').value) || 0;
+    accounts = null;
+  }
+
+  if (!qty || !avg) { toast('수량과 평균매수가를 입력하세요.', 'red'); return; }
+
   const idx = portfolioManual.findIndex(p => p.stock === stock);
+  const base = { stock, qty, avg, cur, target, stop };
+  if (accounts) base.accounts = accounts;
+
   if (idx >= 0) {
-    portfolioManual[idx] = { ...portfolioManual[idx], qty, avg, cur, target, stop };
+    portfolioManual[idx] = { ...portfolioManual[idx], ...base };
     toast(`${stock} 수동 정보가 업데이트되었습니다.`, 'blue');
   } else {
-    portfolioManual.push({ id: Date.now(), stock, qty, avg, cur, target, stop });
+    portfolioManual.push({ id: Date.now(), ...base });
     toast(`${stock}이(가) 수동 추가되었습니다.`);
   }
   save('pmanual', portfolioManual);
   renderPortfolio();
-  ['p-m-stock','p-m-qty','p-m-avg','p-m-cur','p-m-target','p-m-stop'].forEach(id => document.getElementById(id).value = '');
+
+  ['p-m-stock','p-m-qty','p-m-avg','p-m-cur','p-m-target','p-m-stop'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  _ACCT_LIST.forEach(a => {
+    const el = document.getElementById(`p-m-acct-${a.id}`); if (el) el.checked = false;
+  });
+  updateManualAccountRows();
 }
 
 function deleteManualPortfolio(id) {
@@ -1680,11 +1804,15 @@ function renderPortfolio() {
     });
 
   const autoNames = new Set(autoRows.map(r => r.stock));
-  const manualRows = portfolioManual.map(p => ({
-    stock: p.stock, qty: p.qty, avg: p.avg,
-    cur: p.cur, target: p.target, stop: p.stop,
-    isAuto: false, id: p.id
-  })).filter(r => !autoNames.has(r.stock));
+  const manualRows = portfolioManual.map(p => {
+    // 계좌 필터 적용: 특정 계좌로 필터링 시 해당 계좌 데이터만 표시
+    if (portfolioAccountFilter !== 'all' && p.accounts && p.accounts.length) {
+      const acct = p.accounts.find(a => a.name === portfolioAccountFilter);
+      if (!acct) return null;
+      return { stock: p.stock, qty: acct.qty, avg: acct.avg, cur: p.cur, target: p.target, stop: p.stop, isAuto: false, id: p.id, accounts: p.accounts };
+    }
+    return { stock: p.stock, qty: p.qty, avg: p.avg, cur: p.cur, target: p.target, stop: p.stop, isAuto: false, id: p.id, accounts: p.accounts || null };
+  }).filter(r => r && !autoNames.has(r.stock));
 
   const allRows = [...autoRows, ...manualRows];
 
@@ -1718,6 +1846,9 @@ function renderPortfolio() {
       const plPct    = r.avg ? (curPrice - r.avg) / r.avg * 100 : 0;
       const weight   = totalVal > 0 ? val / totalVal * 100 : 0;
       const manualId = r.isAuto ? 'null' : r.id;
+      const acctBadges = (!r.isAuto && r.accounts && r.accounts.length)
+        ? '<div style="margin-top:3px;font-size:10px;color:var(--muted)">' + r.accounts.map(a => `${a.name} ${fmt(a.qty)}주@${fmt(a.avg)}`).join(' / ') + '</div>'
+        : '';
       return `<tr>
         <td>
           <strong>${r.stock}</strong>
@@ -1737,7 +1868,7 @@ function renderPortfolio() {
           <div class="weight-bar-bg"><div class="weight-bar-fill" style="width:${weight}%"></div></div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">${fmtF(weight,1)}%</div>
         </td>
-        <td class="text-right">${fmt(r.qty)}주</td>
+        <td class="text-right">${fmt(r.qty)}주${acctBadges}</td>
         <td class="text-right"><strong>${fmt(r.avg)}원</strong></td>
         <td class="text-right">
           <input class="cur-input" type="number" value="${r.cur||''}" placeholder="입력"
