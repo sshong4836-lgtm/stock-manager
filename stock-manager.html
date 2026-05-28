@@ -944,6 +944,13 @@
     <button id="watchlist-kiwoom-btn" class="btn btn-ghost btn-sm no-print" onclick="fetchWatchlistKiwoom()">🏦 키움 시세</button>
     <button id="sse-status-btn" class="btn btn-ghost btn-sm no-print" onclick="startRealtimeSSE()" title="실시간 연결 (클릭: 재연결)">⚫ 실시간</button>
   </div>
+  <div id="w-ready-acct-filter" style="display:none;margin-bottom:10px;display:none">
+    <span style="font-size:12px;color:var(--muted);margin-right:6px">계좌 필터:</span>
+    <button class="btn btn-sm w-racct-btn active" data-acct="all"    onclick="setWatchReadyAccountFilter('all')">전체</button>
+    <button class="btn btn-sm w-racct-btn"        data-acct="삼성"  onclick="setWatchReadyAccountFilter('삼성')">🏦 삼성</button>
+    <button class="btn btn-sm w-racct-btn"        data-acct="키움"  onclick="setWatchReadyAccountFilter('키움')">💙 키움</button>
+    <button class="btn btn-sm w-racct-btn"        data-acct="NH"    onclick="setWatchReadyAccountFilter('NH')">🟢 NH</button>
+  </div>
   <div class="wc-list" id="w-grid"></div>
 </div>
 
@@ -3365,11 +3372,17 @@ function calcDY() {
 // 관심종목
 // ══════════════════════════════════════════════════════
 let _watchGroup = 'watch1';
+let _watchReadyAccountFilter = 'all';
 
 function switchWatchGroup(btn, group) {
   _watchGroup = group;
   document.querySelectorAll('#w-group-tabs .sub-tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderWatchlist();
+}
+
+function setWatchReadyAccountFilter(acct) {
+  _watchReadyAccountFilter = acct;
   renderWatchlist();
 }
 
@@ -3610,8 +3623,24 @@ function renderWatchlist() {
     if (btn) btn.textContent = label;
   });
 
-  // 그룹 필터 + 검색어 필터
+  // 매수대기 계좌 필터 바 표시/숨김 및 active 버튼 갱신
+  const racctBar = document.getElementById('w-ready-acct-filter');
+  if (racctBar) {
+    racctBar.style.display = _watchGroup === 'ready' ? 'flex' : 'none';
+    if (_watchGroup === 'ready') {
+      racctBar.style.alignItems = 'center';
+      racctBar.style.gap = '6px';
+      racctBar.querySelectorAll('.w-racct-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.acct === _watchReadyAccountFilter);
+      });
+    }
+  }
+
+  // 그룹 필터 + 계좌 필터 + 검색어 필터
   let list = watchlist.filter(w => normalizeGroup(w.group) === _watchGroup);
+  if (_watchGroup === 'ready' && _watchReadyAccountFilter !== 'all') {
+    list = list.filter(w => (w.account || '삼성') === _watchReadyAccountFilter);
+  }
   if (q) list = list.filter(w =>
     (w.stock||'').toLowerCase().includes(q) ||
     (w.memo||'').toLowerCase().includes(q));
