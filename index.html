@@ -1365,6 +1365,7 @@ ETF_ACCOUNTS.forEach(a => {
 let portfolioMeta   = JSON.parse(localStorage.getItem('sm-pmeta')        || '{}');
 let portfolioManual = JSON.parse(localStorage.getItem('sm-pmanual')      || '[]');
 let portfolioAccountFilter = 'all'; // 포트폴리오 계좌 필터: 'all' | '삼성' | '키움' | 'NH'
+let _partialSellData = null;
 let watchlist       = JSON.parse(localStorage.getItem('sm-watchlist')    || '[]');
 let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]');
 let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
@@ -1773,6 +1774,200 @@ function deleteManualPortfolio(id) {
   renderPortfolio();
 }
 
+// ── 부분매도 ──────────────────────────────────────────
+function openPartialSellModal(manualId, stock, qty, avg, curPrice) {
+  const existing = document.getElementById('partial-sell-modal');
+  if (existing) existing.remove();
+
+  // 계좌별 데이터 수집
+  let accounts = null;
+  if (manualId !== null) {
+    const p = portfolioManual.find(p => p.id === manualId);
+    if (p && p.accounts && p.accounts.length) accounts = p.accounts.filter(a => a.qty > 0);
+  }
+
+  // 자동종목: 계좌별 보유수량 조회
+  let acctOpts;
+  if (manualId === null) {
+    acctOpts = ['삼성', '키움', 'NH'].map(name => {
+      const h = calcHoldingsFromJournal(name);
+      const held = h[stock] || {};
+      return { name, qty: Math.round((held.qty || 0) * 1000) / 1000, avg: held.avg || avg };
+    }).filter(a => a.qty > 0.0001);
+    if (!acctOpts.length) acctOpts = [{ name: portfolioAccountFilter !== 'all' ? portfolioAccountFilter : '삼성', qty, avg }];
+  } else if (accounts && accounts.length) {
+    acctOpts = accounts.map(a => ({ name: a.name, qty: a.qty, avg: a.avg }));
+  } else {
+    acctOpts = ['삼성', '키움', 'NH'].map(name => ({ name, qty: null, avg: null }));
+  }
+
+  const defaultAcct = portfolioAccountFilter !== 'all' ? portfolioAccountFilter : acctOpts[0].name;
+  _partialSellData = { manualId, stock, qty, avg, accounts };
+
+  const acctSelectHtml = acctOpts.length > 1
+    ? `<select id="ps-account" class="form-control" onchange="updateSellPLPreview()">${
+        acctOpts.map(a => `<option value="${a.name}" ${a.name===defaultAcct?'selected':''}>${a.name}${a.qty!=null?' ('+fmt(a.qty)+'주)':''}</option>`).join('')
+      }</select>`
+    : `<input type="text" id="ps-account" class="form-control" value="${acctOpts[0].name}" readonly style="background:var(--bg3)">`;
+
+  const acctInfo = accounts && accounts.length
+    ? `<div style="margin-top:4px;font-size:11px;color:var(--muted)">${accounts.map(a=>`${a.name} ${fmt(a.qty)}주 @ ${fmt(a.avg)}원`).join(' / ')}</div>`
+    : (manualId === null && acctOpts.length > 1
+        ? `<div style="margin-top:4px;font-size:11px;color:var(--muted)">${acctOpts.map(a=>`${a.name} ${fmt(a.qty)}주`).join(' / ')}</div>`
+        : '');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'partial-sell-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px;min-width:340px;max-width:460px;width:92%">
+      <div style="font-size:1.1rem;font-weight:700;margin-bottom:4px">📤 부분매도</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:20px">
+        <strong style="color:var(--text)">${stock}</strong> &nbsp;|&nbsp;
+        보유 <strong>${fmt(qty)}주</strong> &nbsp;|&nbsp; 평균단가 <strong>${fmt(avg)}원</strong>
+        ${acctInfo}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:18px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:.8rem;color:var(--muted)">매도일</label>
+          <input id="ps-date" type="date" class="form-control" value="${today()}">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:.8rem;color:var(--muted)">계좌</label>
+          ${acctSelectHtml}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:.8rem;color:var(--muted)">매도수량 (주)</label>
+          <input id="ps-qty" type="number" class="form-control" placeholder="0" min="1" oninput="updateSellPLPreview()">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:.8rem;color:var(--muted)">매도가 (원)</label>
+          <input id="ps-price" type="number" class="form-control" value="${curPrice||''}" placeholder="0" oninput="updateSellPLPreview()">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:.8rem;color:var(--muted)">수수료 (원)</label>
+          <input id="ps-fee" type="number" class="form-control" value="0" min="0" oninput="updateSellPLPreview()">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:.8rem;color:var(--muted)">예상 손익</label>
+          <div id="ps-pl-preview" style="padding:5px 8px;font-size:14px;font-weight:600;border-radius:6px;background:var(--bg3)">-</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('partial-sell-modal').remove()">취소</button>
+        <button class="btn btn-danger" onclick="confirmPartialSell()">매도 확인</button>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(() => { document.getElementById('ps-qty')?.focus(); updateSellPLPreview(); }, 50);
+}
+
+function updateSellPLPreview() {
+  if (!_partialSellData) return;
+  const { accounts, avg: rowAvg } = _partialSellData;
+  const account = document.getElementById('ps-account')?.value;
+
+  let avg = rowAvg;
+  if (accounts) {
+    const a = accounts.find(a => a.name === account);
+    if (a) avg = a.avg;
+  } else if (_partialSellData.manualId === null && account) {
+    const h = calcHoldingsFromJournal(account)[_partialSellData.stock] || {};
+    if (h.avg) avg = h.avg;
+  }
+
+  const sellQty = parseFloat(document.getElementById('ps-qty')?.value) || 0;
+  const price   = parseFloat(document.getElementById('ps-price')?.value) || 0;
+  const fee     = parseFloat(document.getElementById('ps-fee')?.value) || 0;
+  const el      = document.getElementById('ps-pl-preview');
+  if (!el) return;
+  if (!sellQty || !price) { el.textContent = '-'; el.style.color = ''; return; }
+  const pl = (price - avg) * sellQty - fee;
+  el.textContent = `${sign(pl)}${fmt(Math.abs(pl))}원`;
+  el.style.color = pl >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function confirmPartialSell() {
+  if (!_partialSellData) return;
+  const { manualId, stock, qty: totalQty, avg: rowAvg, accounts } = _partialSellData;
+
+  const date    = document.getElementById('ps-date').value;
+  const account = document.getElementById('ps-account').value;
+  const sellQty = parseFloat(document.getElementById('ps-qty').value) || 0;
+  const price   = parseFloat(document.getElementById('ps-price').value) || 0;
+  const fee     = parseFloat(document.getElementById('ps-fee').value) || 0;
+
+  if (!sellQty || !price) { toast('매도수량과 매도가를 입력하세요.', 'red'); return; }
+
+  // 계좌별 최대 보유수량 & 실효 평균단가 산출
+  let maxQty, effectiveAvg;
+  if (manualId === null) {
+    // 자동종목: 해당 계좌의 일지 기반 보유량
+    const h = calcHoldingsFromJournal(account)[stock] || {};
+    maxQty = h.qty || 0;
+    effectiveAvg = h.avg || rowAvg;
+  } else if (accounts) {
+    // 계좌별 수동종목
+    const a = accounts.find(a => a.name === account);
+    maxQty = a ? a.qty : 0;
+    effectiveAvg = a ? a.avg : rowAvg;
+  } else {
+    // 단순 수동종목
+    maxQty = totalQty;
+    effectiveAvg = rowAvg;
+  }
+
+  if (sellQty > maxQty + 0.0001) {
+    toast(`${account} 계좌 보유수량(${fmt(maxQty)}주)을 초과할 수 없습니다.`, 'red'); return;
+  }
+
+  // 매매일지에 매도 내역 추가
+  journals.unshift({ id: Date.now(), date, stock, account, type: 'sell', qty: sellQty, price, fee, memo: '부분매도' });
+  save('journals', journals);
+
+  // 수동종목 수량 차감
+  if (manualId !== null) {
+    const idx = portfolioManual.findIndex(p => p.id === manualId);
+    if (idx >= 0) {
+      const p = portfolioManual[idx];
+      if (p.accounts && p.accounts.length) {
+        const ai = p.accounts.findIndex(a => a.name === account);
+        if (ai >= 0) {
+          p.accounts[ai].qty -= sellQty;
+          if (p.accounts[ai].qty < 0.0001) p.accounts.splice(ai, 1);
+        }
+        const rem = p.accounts.filter(a => a.qty > 0.0001);
+        if (!rem.length) {
+          portfolioManual.splice(idx, 1);
+        } else {
+          p.qty = rem.reduce((s,a)=>s+a.qty, 0);
+          p.avg = rem.reduce((s,a)=>s+a.qty*a.avg, 0) / p.qty;
+          p.accounts = rem;
+        }
+      } else {
+        const nq = p.qty - sellQty;
+        if (nq < 0.0001) portfolioManual.splice(idx, 1);
+        else p.qty = nq;
+      }
+      save('pmanual', portfolioManual);
+    }
+  }
+
+  document.getElementById('partial-sell-modal').remove();
+  _partialSellData = null;
+
+  const pl = (price - effectiveAvg) * sellQty - fee;
+  const isFull = sellQty >= maxQty - 0.0001;
+  toast(`${stock} ${fmt(sellQty)}주 매도 완료 · ${sign(pl)}${fmt(Math.abs(pl))}원${isFull ? ' (전량매도)' : ''}`,
+        pl >= 0 ? 'green' : 'red');
+
+  renderJournal();
+  renderPortfolio();
+}
+// ─────────────────────────────────────────────────────
+
 function updateInlineCur(stock, val, isManualId) {
   const v = parseFloat(val) || 0;
   if (isManualId) {
@@ -1879,9 +2074,11 @@ function renderPortfolio() {
         <td class="text-right ${cc(plPct)}">${sign(plPct)}${fmtF(plPct,2)}%</td>
         <td class="text-right ${r.target?'text-blue':'text-muted'}">${r.target?fmt(r.target)+'원':'-'}</td>
         <td class="text-right ${r.stop?'text-red':'text-muted'}">${r.stop?fmt(r.stop)+'원':'-'}</td>
-        <td class="no-print">${!r.isAuto
-          ? `<button class="btn btn-danger btn-sm" onclick="deleteManualPortfolio(${r.id})">삭제</button>`
-          : '<span style="font-size:11px;color:var(--muted)">일지연동</span>'}</td>
+        <td class="no-print" style="white-space:nowrap;min-width:90px">
+          <button class="btn btn-sm no-print" style="background:rgba(255,140,0,.15);color:var(--orange);border:1px solid rgba(255,140,0,.3);margin-bottom:2px"
+            onclick="openPartialSellModal(${manualId},'${r.stock}',${r.qty},${r.avg},${r.cur||r.avg})">📤 부분매도</button>
+          ${!r.isAuto ? `<br><button class="btn btn-danger btn-sm no-print" onclick="deleteManualPortfolio(${r.id})">삭제</button>` : ''}
+        </td>
       </tr>`;
     }).join('');
   }
