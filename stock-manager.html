@@ -903,6 +903,7 @@
         <select id="w-group" onchange="updateWatchFormBuyFields()">
           <option value="watch1">🔵 관찰1</option>
           <option value="watch2">🟣 관찰2</option>
+          <option value="ready">🟡 매수대기</option>
           <option value="holding">🔴 보유종목</option>
         </select>
       </div>
@@ -917,6 +918,14 @@
       <div class="form-group">
         <label>매수날짜</label>
         <input type="date" id="w-buy-date" disabled style="opacity:0.4">
+      </div>
+      <div class="form-group">
+        <label>계좌</label>
+        <select id="w-buy-account" disabled style="opacity:0.4">
+          <option value="삼성">삼성계좌</option>
+          <option value="키움">키움계좌</option>
+          <option value="NH">NH계좌</option>
+        </select>
       </div>
     </div>
     <button class="btn btn-primary" onclick="addWatch()">+ 관심종목 추가</button>
@@ -3366,8 +3375,8 @@ function switchWatchGroup(btn, group) {
 
 function updateWatchFormBuyFields() {
   const grp = document.getElementById('w-group').value;
-  const disabled = grp !== 'holding';
-  ['w-buy-amount','w-buy-qty','w-buy-date'].forEach(id => {
+  const disabled = grp !== 'holding' && grp !== 'ready';
+  ['w-buy-amount','w-buy-qty','w-buy-date','w-buy-account'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.disabled = disabled;
@@ -3495,17 +3504,20 @@ function addWatch() {
   const stock     = document.getElementById('w-stock').value.trim();
   const ticker    = document.getElementById('w-ticker').value.trim().toUpperCase();
   const group     = document.getElementById('w-group').value || 'watch1';
-  const buyAmount = parseFloat(document.getElementById('w-buy-amount').value) || 0;
-  const buyQty    = parseFloat(document.getElementById('w-buy-qty').value)    || 0;
-  const buyDate   = document.getElementById('w-buy-date').value || '';
+  const buyAmount  = parseFloat(document.getElementById('w-buy-amount').value) || 0;
+  const buyQty     = parseFloat(document.getElementById('w-buy-qty').value)    || 0;
+  const buyDate    = document.getElementById('w-buy-date').value || '';
+  const buyAccount = document.getElementById('w-buy-account').value || '삼성';
   if (!stock) { toast('종목명을 입력하세요.','red'); return; }
   const item = { id:Date.now(), stock, ticker, group, buyAmount, buyQty, buyDate };
+  if (group === 'ready' || group === 'holding') item.account = buyAccount;
   if (_watchSearchPrice) item.price = _watchSearchPrice;
   _watchSearchPrice = 0;
   watchlist.unshift(item);
   save('watchlist', watchlist);
   renderWatchlist();
   ['w-stock','w-ticker','w-buy-amount','w-buy-qty','w-buy-date'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('w-buy-account').value = '삼성';
   document.getElementById('w-group').value = 'watch1';
   updateWatchFormBuyFields();
   toast(`${stock}이(가) 관심종목에 추가되었습니다.`);
@@ -3696,6 +3708,21 @@ function renderWatchlist() {
             </select>
           </div>
           ${wGrp === 'ready' ? `
+          <div class="form-group">
+            <label>매수금액 (원/주)</label>
+            <input type="number" value="${ea(w.buyAmount||'')}" placeholder="주당 매수가"
+              onchange="saveWatchField(${w.id},'buyAmount',parseFloat(this.value)||0);renderWatchlist()">
+          </div>
+          <div class="form-group">
+            <label>수량</label>
+            <input type="number" value="${ea(w.buyQty||'')}" placeholder="0"
+              onchange="saveWatchField(${w.id},'buyQty',parseFloat(this.value)||0);renderWatchlist()">
+          </div>
+          <div class="form-group">
+            <label>매수날짜</label>
+            <input type="date" value="${ea(w.buyDate||'')}"
+              onchange="saveWatchField(${w.id},'buyDate',this.value);renderWatchlist()">
+          </div>
           <div class="form-group">
             <label>계좌</label>
             <select onchange="saveWatchField(${w.id},'account',this.value)">
