@@ -893,9 +893,9 @@
       <div class="form-group">
         <label>종목코드</label>
         <div style="display:flex;gap:4px">
-          <input type="text" id="w-ticker" placeholder="예: NVDA 또는 005930.KS" style="flex:1"
+          <input type="text" id="w-ticker" placeholder="예: 005930 또는 005930.KS" style="flex:1"
                  onkeydown="if(event.key==='Enter'){event.preventDefault();searchWatchTicker()}">
-          <button type="button" id="w-ticker-search-btn" class="btn btn-ghost btn-sm" onclick="searchWatchTicker()" title="Yahoo Finance에서 종목명 자동 조회">🔍 조회</button>
+          <button type="button" id="w-ticker-search-btn" class="btn btn-ghost btn-sm" onclick="searchWatchTicker()" title="키움 API에서 종목명 자동 조회">🔍 조회</button>
         </div>
       </div>
       <div class="form-group">
@@ -921,7 +921,7 @@
     </div>
     <button class="btn btn-primary" onclick="addWatch()">+ 관심종목 추가</button>
   </div>
-  <div class="info-note info-note-blue" style="margin-bottom:12px;font-size:12px">종목코드를 입력하면 Yahoo Finance에서 종목명을 자동으로 불러옵니다. 한국 주식은 <code>6자리코드.KS</code> 형식 (예: 삼성전자 → <code>005930.KS</code>), 미국 주식은 티커 그대로 (예: <code>NVDA</code>)</div>
+  <div class="info-note info-note-blue" style="margin-bottom:12px;font-size:12px">6자리 종목코드를 입력 후 🔍 조회 버튼을 클릭하면 키움 API에서 종목명을 자동으로 불러옵니다. (예: 삼성전자 → <code>005930</code> 또는 <code>005930.KS</code>)</div>
   <div class="sub-tabs" id="w-group-tabs">
     <button id="w-gtab-watch1"  class="sub-tab-btn active" onclick="switchWatchGroup(this,'watch1')">🔵 관찰1</button>
     <button id="w-gtab-watch2"  class="sub-tab-btn"        onclick="switchWatchGroup(this,'watch2')">🟣 관찰2</button>
@@ -3433,49 +3433,54 @@ function updateW2AlertBadge(watchId) {
   }
 }
 
-// ── 종목코드로 Yahoo Finance 조회 → 종목명·현재가 자동 입력 ──
+// ── 종목코드로 키움 API(ka10001) 조회 → 종목명 자동 입력 ──
+const KIWOOM_NGROK = 'https://stock-manager-hong.ngrok.app';
+
 async function searchWatchTicker() {
   const tickerInput = document.getElementById('w-ticker');
-  const ticker = tickerInput.value.trim().toUpperCase();
-  if (!ticker) { toast('종목코드를 먼저 입력하세요.', 'red'); return; }
-  tickerInput.value = ticker;
+  const raw = tickerInput.value.trim().toUpperCase();
+  if (!raw) { toast('종목코드를 먼저 입력하세요.', 'red'); return; }
+  tickerInput.value = raw;
+
+  // 6자리 코드 추출: '005930.KS' → '005930', '005930' → '005930'
+  const stkCd = _toKiwoomCode(raw) || raw.replace(/\.(KS|KQ|KN)$/i, '');
+  if (!stkCd || !/^[A-Z0-9]{6}$/i.test(stkCd)) {
+    toast('6자리 한국 종목코드를 입력하세요. (예: 005930 또는 005930.KS)', 'red'); return;
+  }
 
   const btn = document.getElementById('w-ticker-search-btn');
   const originalText = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
 
+  // 프록시 설정이 있으면 우선 사용, 없으면 ngrok URL 사용
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+
   try {
-    // 1. Yahoo Finance → 현재가 조회
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d&_=${Date.now()}`;
-    const proxyBase = 'https://api.allorigins.win/raw?url=';
-    const res = await fetch(proxyBase + encodeURIComponent(yahooUrl));
+    const res = await fetch(`${base}/api/dostk/stkinfo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-id': 'ka10001',
+        'ngrok-skip-browser-warning': '1'
+      },
+      body: JSON.stringify({ stk_cd: stkCd })
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta) throw new Error('데이터 없음');
-    const price = meta.regularMarketPrice;
-    if (!price) throw new Error('가격 없음');
 
-    // 2. 종목명: 한국 주식이면 NAVER Finance 모바일 API에서 한글명 우선
-    let name = meta.shortName || meta.longName || ticker;
-    const isKR = ticker.endsWith('.KS') || ticker.endsWith('.KQ') || ticker.endsWith('.KN');
-    if (isKR) {
-      const code = ticker.split('.')[0];
-      try {
-        const naverUrl = `https://m.stock.naver.com/api/stock/${code}/basic`;
-        const naverRes = await fetch(proxyBase + encodeURIComponent(naverUrl));
-        if (naverRes.ok) {
-          const nj = await naverRes.json();
-          // NAVER 응답 필드: stockName (한글명)
-          if (nj.stockName) name = nj.stockName;
-        }
-      } catch(_) { /* NAVER 실패 시 Yahoo 영문명 사용 */ }
-    }
+    // ka10001 응답 필드 (프록시가 키움 원본 그대로 반환)
+    const name = json.stk_nm
+      || json.atn_stk_infr?.[0]?.stk_nm
+      || json.stk_bsc_info?.[0]?.stk_nm
+      || json.output?.stk_nm;
+
+    if (!name) throw new Error('종목명을 찾을 수 없습니다. 종목코드를 확인하세요.');
 
     document.getElementById('w-stock').value = name;
     toast(`✅ ${name} 조회 완료`);
   } catch(e) {
-    toast(`조회 실패 (${ticker}) — 종목코드를 확인하세요.`, 'red');
+    toast(`조회 실패 (${stkCd}) — ${e.message}`, 'red');
+    console.error('[searchWatchTicker]', e);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = originalText; }
   }
