@@ -3892,7 +3892,13 @@ function renderWatchlist() {
               w.buyQty    ? `${fmt(w.buyQty)}주` : '',
               w.buyDate   || ''
             ].filter(Boolean).join(' · ');
-            return `${acctBadge ? `<div style="margin-top:3px">${acctBadge}</div>` : ''}${metaParts ? `<span class="wc-tgt">${metaParts}</span>` : ''}`;
+            const pctHtml = (w.buyAmount && w.price) ? (() => {
+              const pct   = (w.price - w.buyAmount) / w.buyAmount * 100;
+              const sign  = pct >= 0 ? '+' : '';
+              const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+              return `<span style="font-size:12px;font-weight:700;color:${color}">${sign}${fmtF(pct,2)}%</span>`;
+            })() : '';
+            return `${acctBadge ? `<div style="margin-top:3px">${acctBadge}</div>` : ''}${metaParts ? `<span class="wc-tgt">${metaParts}</span>` : ''}${pctHtml}`;
           })() : ''}
           ${(() => {
             if (wGrp !== 'holding') return '';
