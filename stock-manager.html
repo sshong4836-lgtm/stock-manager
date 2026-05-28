@@ -3386,14 +3386,14 @@ function setWatchReadyAccountFilter(acct) {
   renderWatchlist();
 }
 
-// portfolioManual에 있는 종목 중 watchlist holding 항목이 없으면 자동 생성 (분석설정 유지용)
-function syncHoldingWatchlistWithPortfolio() {
+// 자동연동+수동 포트폴리오 종목 중 watchlist holding 항목이 없으면 자동 생성 (분석설정 유지용)
+function syncHoldingWatchlistWithPortfolio(allRows) {
   const norm = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
   let changed = false;
-  portfolioManual.forEach(p => {
-    const exists = watchlist.some(w => norm(w.group) === 'holding' && w.stock === p.stock);
+  allRows.forEach(r => {
+    const exists = watchlist.some(w => norm(w.group) === 'holding' && w.stock === r.stock);
     if (!exists) {
-      watchlist.push({ id: Date.now() + Math.floor(Math.random() * 9999), stock: p.stock, ticker: '', group: 'holding' });
+      watchlist.push({ id: Date.now() + Math.floor(Math.random() * 9999), stock: r.stock, ticker: '', group: 'holding' });
       changed = true;
     }
   });
@@ -3624,7 +3624,16 @@ function renderWatchlist() {
   const normalizeGroup = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
 
   // 그룹별 카운트 계산 → 탭 버튼 라벨 업데이트
-  const gc = { watch1:0, watch2:0, ready:0, holding: portfolioManual.length };
+  // 포트폴리오 통합 (자동연동+수동) — holding 탭 카운트/목록 공통 사용
+  const _allJournalH = calcHoldingsFromJournal();
+  const _autoStocks  = new Set(Object.entries(_allJournalH).filter(([,h]) => h.qty > 0.0001).map(([s]) => s));
+  const _allPmRows   = [
+    ...Object.entries(_allJournalH).filter(([,h]) => h.qty > 0.0001)
+      .map(([stock, h]) => ({ stock, qty: h.qty, avg: h.avg, isAuto: true })),
+    ...portfolioManual.filter(p => !_autoStocks.has(p.stock))
+      .map(p => ({ stock: p.stock, qty: p.qty, avg: p.avg, isAuto: false, id: p.id, accounts: p.accounts||null }))
+  ];
+  const gc = { watch1:0, watch2:0, ready:0, holding: _allPmRows.length };
   watchlist.forEach(w => { const g = normalizeGroup(w.group); if (g !== 'holding' && gc[g]!==undefined) gc[g]++; });
   const tabLabels = {
     watch1:  `🔵 관찰1 (${gc.watch1})`,
@@ -3653,10 +3662,10 @@ function renderWatchlist() {
   // 그룹 필터 + 계좌 필터 + 검색어 필터
   let list;
   if (_watchGroup === 'holding') {
-    syncHoldingWatchlistWithPortfolio();
-    list = portfolioManual.map(p => {
-      const wItem = watchlist.find(w => normalizeGroup(w.group) === 'holding' && w.stock === p.stock);
-      return wItem ? { ...wItem, _pm: p } : null;
+    syncHoldingWatchlistWithPortfolio(_allPmRows);
+    list = _allPmRows.map(pm => {
+      const wItem = watchlist.find(w => normalizeGroup(w.group) === 'holding' && w.stock === pm.stock);
+      return wItem ? { ...wItem, _pm: pm } : null;
     }).filter(Boolean);
   } else {
     list = watchlist.filter(w => normalizeGroup(w.group) === _watchGroup);
@@ -3796,7 +3805,11 @@ function renderWatchlist() {
             <div style="padding:5px 0;font-size:14px;font-weight:600;color:var(--text)">${fmt(Math.round(w._pm.avg||0))}원</div>
           </div>
           <div class="form-group" style="grid-column:1/-1">
-            <div style="background:rgba(255,165,0,.1);border:1px solid rgba(255,165,0,.3);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--muted)">📌 수량/매수가는 <strong>포트폴리오 탭</strong>에서 수정하세요.</div>
+            <div style="background:rgba(255,165,0,.1);border:1px solid rgba(255,165,0,.3);border-radius:6px;padding:7px 10px;font-size:11px;color:var(--muted)">
+              ${w._pm?.isAuto
+                ? '📊 <strong>자동연동</strong> — 수량/매수가는 매매일지에서 자동 계산됩니다.'
+                : '📌 <strong>수동입력</strong> — 수량/매수가는 <strong>포트폴리오 탭</strong>에서 수정하세요.'}
+            </div>
           </div>` : ''}
         </div>
         <div class="alert-checks-section">
