@@ -3878,6 +3878,22 @@ function renderWatchlist() {
         </div>
         <div class="wc-prices">
           <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
+          ${wGrp === 'ready' ? (() => {
+            const ACCT_COLORS = { '삼성':'var(--orange)', '키움':'var(--blue)', 'NH':'var(--green)' };
+            const ACCT_ICONS  = { '삼성':'🏦', '키움':'💙', 'NH':'🟢' };
+            const acct  = w.account;
+            const color = acct ? (ACCT_COLORS[acct] || 'var(--muted)') : null;
+            const icon  = acct ? (ACCT_ICONS[acct]  || '') : null;
+            const acctBadge = acct
+              ? `<span style="display:inline-block;background:rgba(255,255,255,.07);color:${color};border:1px solid ${color};border-radius:4px;padding:1px 7px;font-size:10px;white-space:nowrap">${icon} ${acct}</span>`
+              : '';
+            const metaParts = [
+              w.buyAmount ? `매수가 ${fmtPrice(w.buyAmount, w.ticker)}` : '',
+              w.buyQty    ? `${fmt(w.buyQty)}주` : '',
+              w.buyDate   || ''
+            ].filter(Boolean).join(' · ');
+            return `${acctBadge ? `<div style="margin-top:3px">${acctBadge}</div>` : ''}${metaParts ? `<span class="wc-tgt">${metaParts}</span>` : ''}`;
+          })() : ''}
           ${(() => {
             if (wGrp !== 'holding') return '';
             const ACCT_COLORS = { 삼성:'var(--orange)', 키움:'var(--blue)', NH:'var(--green)' };
