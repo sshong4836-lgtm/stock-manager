@@ -6023,6 +6023,20 @@ setTimeout(() => {
     setTimeout(syncSubscribedCodes, 2000);
   }
 }, 1000);
+ async function registerAlert(code, name, stopLoss, target) {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  try {
+    await fetch(`${proxyUrl}/api/alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, name, stopLoss, target })
+    });
+    console.log('알림 등록:', name);
+  } catch(e) {
+    console.warn('알림 등록 실패:', e.message);
+  }
+} 
 </script>
 </body>
 </html>
