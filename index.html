@@ -327,6 +327,18 @@
     .acct-summary-table tr:last-child td { border-bottom:none; background:var(--bg3); font-weight:700; }
     .acct-summary-table tr:hover:not(:last-child) td { background:rgba(255,255,255,.02); }
 
+    /* ── 시총순위 탭 ── */
+    .mc-sub-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); }
+    .mc-sub-btn { background:none; border:none; color:var(--muted); padding:8px 20px; font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color .15s; }
+    .mc-sub-btn.active { color:var(--blue); border-bottom-color:var(--blue); font-weight:700; }
+    .mc-sub-btn:hover:not(.active) { color:var(--text); }
+    .mc-panel { display:none; }
+    .mc-panel.active { display:block; }
+    .mc-new-badge { display:inline-block; background:rgba(248,81,73,.15); color:var(--red); border:1px solid rgba(248,81,73,.4); border-radius:4px; font-size:10px; font-weight:700; padding:1px 5px; margin-left:5px; vertical-align:middle; }
+    .mc-rank { color:var(--muted); font-size:12px; width:36px; text-align:right; }
+    .mc-cap { color:var(--muted); font-size:12px; }
+    .mc-meta { font-size:11px; color:var(--muted); margin-bottom:12px; }
+
     /* ── Print ── */
     @media print {
       .header-right, .tabs, .btn, .no-print, #toast-wrap { display:none !important; }
@@ -410,6 +422,7 @@
   <button class="tab-btn"        onclick="switchTab(this,'alert')">🔔 장시간 알림</button>
   <button class="tab-btn"        onclick="switchTab(this,'futures')">⚡ 선물동향</button>
   <button class="tab-btn"        onclick="switchTab(this,'daytrade')">⚡ 단타수익</button>
+  <button class="tab-btn"        onclick="switchTab(this,'marketcap');loadMarketCap(false)">📈 시총순위</button>
   <button class="tab-btn"        onclick="switchTab(this,'settings')">⚙️ 설정</button>
 </div>
 
@@ -1139,6 +1152,56 @@
     </div>
   </div>
 
+</div>
+
+<!-- ══════════════════════════════
+     TAB : 시총순위
+══════════════════════════════ -->
+<div id="tab-marketcap" class="tab-content">
+  <div class="card">
+    <div class="section-header" style="margin-bottom:0">
+      <div class="card-title" style="margin:0">📈 시가총액 순위</div>
+      <div class="row-flex" style="gap:8px">
+        <span id="mc-updated" class="mc-meta" style="margin:0;align-self:center"></span>
+        <button class="btn btn-ghost btn-sm no-print" onclick="loadMarketCap(true)">🔄 새로고침</button>
+      </div>
+    </div>
+    <div class="mc-sub-tabs" style="margin-top:14px">
+      <button class="mc-sub-btn active" id="mc-btn-kospi" onclick="switchMcTab('kospi')">🔵 코스피 TOP100</button>
+      <button class="mc-sub-btn"        id="mc-btn-kosdaq" onclick="switchMcTab('kosdaq')">🟢 코스닥 TOP20</button>
+    </div>
+
+    <div id="mc-panel-kospi" class="mc-panel active">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="text-right" style="width:44px">순위</th>
+            <th>종목명</th>
+            <th class="text-right">현재가</th>
+            <th class="text-right">등락률</th>
+            <th class="text-right">시가총액(억)</th>
+          </tr></thead>
+          <tbody id="mc-tbody-kospi"><tr><td colspan="5" class="empty">로딩 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="mc-panel-kosdaq" class="mc-panel">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th class="text-right" style="width:44px">순위</th>
+            <th>종목명</th>
+            <th class="text-right">현재가</th>
+            <th class="text-right">등락률</th>
+            <th class="text-right">시가총액(억)</th>
+          </tr></thead>
+          <tbody id="mc-tbody-kosdaq"><tr><td colspan="5" class="empty">로딩 중...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="mc-empty" class="empty" style="display:none">프록시 서버에 연결할 수 없습니다. 설정 탭에서 프록시 URL을 확인하세요.</div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════
@@ -6036,7 +6099,102 @@ setTimeout(() => {
   } catch(e) {
     console.warn('알림 등록 실패:', e.message);
   }
-} 
+}
+
+// ══════════════════════════════════════════════════════
+// 시총순위 탭
+// ══════════════════════════════════════════════════════
+let _mcCurrentTab = 'kospi';
+let _mcLoading = false;
+
+function switchMcTab(tab) {
+  _mcCurrentTab = tab;
+  document.getElementById('mc-btn-kospi').classList.toggle('active', tab === 'kospi');
+  document.getElementById('mc-btn-kosdaq').classList.toggle('active', tab === 'kosdaq');
+  document.getElementById('mc-panel-kospi').classList.toggle('active', tab === 'kospi');
+  document.getElementById('mc-panel-kosdaq').classList.toggle('active', tab === 'kosdaq');
+}
+
+function _mcFmtPrice(v) {
+  const n = parseFloat(String(v || 0).replace(/^[+-]/, ''));
+  return isNaN(n) ? '-' : n.toLocaleString();
+}
+
+function _mcFmtRate(v) {
+  const n = parseFloat(v || 0);
+  if (isNaN(n)) return '<span style="color:var(--muted)">-</span>';
+  const color = n > 0 ? 'var(--green)' : n < 0 ? 'var(--red)' : 'var(--muted)';
+  const sign  = n > 0 ? '+' : '';
+  return `<span style="color:${color}">${sign}${n.toFixed(2)}%</span>`;
+}
+
+function _mcFmtCap(v) {
+  const n = parseInt(String(v || 0).replace(/,/g, ''));
+  if (isNaN(n) || n === 0) return '-';
+  if (n >= 10000) return (n / 10000).toFixed(1) + '조';
+  return n.toLocaleString() + '억';
+}
+
+function _mcRenderRows(items, tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  if (!items || !items.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">데이터 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map((s, i) => {
+    const rank     = s.rank || (i + 1);
+    const name     = s.stk_nm || s.hts_kor_isnm || s.kor_isnm || '-';
+    const price    = _mcFmtPrice(s.cur_prc || s.stck_prpr || s.prpr);
+    const rate     = _mcFmtRate(s.flu_rt   || s.prdy_ctrt || s.ctrt);
+    const cap      = _mcFmtCap(s.mrkt_cap  || s.stck_avls || s.avls);
+    const newBadge = s.isNew ? '<span class="mc-new-badge">신규</span>' : '';
+    return `<tr>
+      <td class="mc-rank text-right">${rank}</td>
+      <td><span style="font-weight:500">${name}</span>${newBadge}</td>
+      <td class="text-right">${price}</td>
+      <td class="text-right">${rate}</td>
+      <td class="mc-cap text-right">${cap}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadMarketCap(force = false) {
+  if (_mcLoading) return;
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) {
+    document.getElementById('mc-empty').style.display = '';
+    document.getElementById('mc-empty').textContent = '설정 탭에서 프록시 서버 URL을 먼저 입력하세요.';
+    return;
+  }
+  _mcLoading = true;
+  const btn = document.querySelector('[onclick*="loadMarketCap(true)"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+  try {
+    const url = `${proxyUrl.replace(/\/$/, '')}/api/market-cap${force ? '?force=true' : ''}`;
+    const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    document.getElementById('mc-empty').style.display = 'none';
+    _mcRenderRows(data.kospi,  'mc-tbody-kospi');
+    _mcRenderRows(data.kosdaq, 'mc-tbody-kosdaq');
+
+    if (data.lastUpdated) {
+      const d = new Date(data.lastUpdated);
+      const hm = d.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+      const snap = data.snapshotDate ? ` · 기준일: ${data.snapshotDate}` : '';
+      document.getElementById('mc-updated').textContent = `갱신: ${hm}${snap}`;
+    }
+  } catch(e) {
+    document.getElementById('mc-empty').style.display = '';
+    document.getElementById('mc-empty').textContent = `조회 실패: ${e.message}`;
+  } finally {
+    _mcLoading = false;
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 새로고침'; }
+  }
+}
 </script>
 </body>
 </html>
