@@ -361,34 +361,73 @@ function saveMarketCapSnapshot(data) {
   fs.writeFileSync(MARKET_CAP_FILE, JSON.stringify(data, null, 2));
 }
 
-async function fetchMarketCapList(mrkt_tp, limit) {
+// 네이버 파이낸스로 시총 순위 조회 (키움 REST API에 시총순위 전용 API 없음)
+const iconv = require('iconv-lite');
+
+async function fetchMarketCapList(sosok, limit) {
+  // sosok: '0' = 코스피, '1' = 코스닥
+  const pages = Math.ceil(limit / 50);
   const all = [];
-  try {
-    let strt = 1;
-    while (all.length < limit) {
-      const r = await axios.post(`${BASE_URL}/api/dostk/mrkcap`,
-        { mrkt_tp, strt_no: String(strt) },
-        { headers: { 'Content-Type': 'application/json;charset=UTF-8', 'authorization': `Bearer ${currentToken}`, 'api-id': 'ka10094' } }
-      );
-      const page = r.data.output1 || r.data.output || [];
-      if (!page.length) break;
-      all.push(...page);
-      if (!r.data.cont_yn || r.data.cont_yn !== 'Y') break;
-      strt += page.length;
+
+  for (let page = 1; page <= pages && all.length < limit; page++) {
+    try {
+      const r = await axios.get('https://finance.naver.com/sise/sise_market_sum.naver', {
+        params: { sosok, page },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'ko-KR,ko;q=0.9',
+          'Referer': 'https://finance.naver.com/sise/sise_market_sum.naver'
+        },
+        responseType: 'arraybuffer',
+        timeout: 10000
+      });
+
+      const html = iconv.decode(Buffer.from(r.data), 'EUC-KR');
+      const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
+      let m;
+      while ((m = rowRe.exec(html)) !== null) {
+        const row = m[1];
+        const codeM = row.match(/code=(\d{6})/);
+        const nameM = row.match(/class="tltle"[^>]*>\s*([^<]+)\s*</);
+        if (!codeM || !nameM) continue;
+
+        // 숫자 td 값 추출 (콤마 제거)
+        const tds = [...row.matchAll(/class="[^"]*"[^>]*>\s*([\d,+-]+)\s*<\/td>/g)]
+          .map(t => t[1].replace(/,/g, '').replace(/^\+/, ''));
+        if (tds.length < 4) continue;
+
+        const price   = parseInt(tds[1]) || 0;
+        const prevChg = parseInt(tds[2]) || 0;     // 전일비(원)
+        const cap     = parseInt(tds[3]) || 0;     // 시가총액(억원)
+        const prevClose = price - prevChg;
+        const rate    = prevClose > 0
+          ? ((prevChg / prevClose) * 100).toFixed(2)
+          : '0.00';
+
+        all.push({
+          stk_cd:   codeM[1],
+          stk_nm:   nameM[1].trim(),
+          cur_prc:  String(price),
+          flu_rt:   rate,
+          mrkt_cap: String(cap),
+          rank:     parseInt(tds[0]) || all.length + 1
+        });
+      }
+    } catch(e) {
+      console.log(`❌ 네이버 시총순위 조회(sosok=${sosok} page=${page}) 실패:`, e.message);
     }
-  } catch(e) {
-    console.log(`❌ 시총순위 조회(mrkt_tp=${mrkt_tp}) 실패:`, e.response?.data || e.message);
+    if (page < pages) await new Promise(res => setTimeout(res, 300));
   }
+
   return all.slice(0, limit);
 }
 
 async function refreshMarketCap() {
-  if (!currentToken) return;
   try {
     const today = new Date().toISOString().split('T')[0];
     const [kospiList, kosdaqList] = await Promise.all([
       fetchMarketCapList('0', 100),
-      fetchMarketCapList('10', 20)
+      fetchMarketCapList('1', 20)
     ]);
     if (!kospiList.length && !kosdaqList.length) return;
 
@@ -449,7 +488,6 @@ function _mcSaveSnapshotIfClose() {
 }
 
 app.get('/api/market-cap', async (req, res) => {
-  if (!currentToken) return res.status(503).json({ error: '토큰 없음' });
   const force = req.query.force === 'true';
   const age = marketCapCache.lastUpdated
     ? Date.now() - new Date(marketCapCache.lastUpdated).getTime() : Infinity;
