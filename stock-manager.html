@@ -4200,6 +4200,13 @@ function saveWatchField(id, field, value) {
   }
   if (field === 'target') {
     updateWatchTargetDisplay(id);
+    // 서버 알림 자동 등록
+    const PROXY = 'https://stock-manager-hong.ngrok.app';
+    fetch(`${PROXY}/api/alerts`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: w.ticker, name: w.name, stopLoss: w.stopLoss||null, target: value})
+    }).catch(()=>{});
   }
 }
 
