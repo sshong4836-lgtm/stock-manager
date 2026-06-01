@@ -4211,7 +4211,7 @@ function saveWatchField(id, field, value) {
     fetch(`${PROXY}/api/alerts`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopPrice||null, target: value})
+      body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopPrice||null, target: value, supportPrice: w.supportPrice||null})
     }).catch(()=>{});
   }
   if (field === 'stopPrice') {
@@ -4219,7 +4219,15 @@ function saveWatchField(id, field, value) {
   fetch(`${PROXY}/api/alerts`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: value, target: w.target||null})
+    body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: value, target: w.target||null, supportPrice: w.supportPrice||null})
+  }).catch(()=>{});
+}
+  if (field === 'supportPrice') {
+  const PROXY = 'https://stock-manager-hong.ngrok.app';
+  fetch(`${PROXY}/api/alerts`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopPrice||null, target: w.target||null, supportPrice: value})
   }).catch(()=>{});
 }
 }
