@@ -4211,10 +4211,10 @@ function saveWatchField(id, field, value) {
     fetch(`${PROXY}/api/alerts`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopLoss||null, target: value})
+      body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopPrice||null, target: value})
     }).catch(()=>{});
   }
-  if (field === 'stopLoss') {
+  if (field === 'stopPrice') {
   const PROXY = 'https://stock-manager-hong.ngrok.app';
   fetch(`${PROXY}/api/alerts`, {
     method: 'POST',
