@@ -3010,14 +3010,16 @@ function toggleEtfHoldings() {
 }
 
 function renderEtfHoldingsTable() {
-  const merged = {};
+  const etfExtraData = JSON.parse(localStorage.getItem('etfExtraData') || '{}'); //
   ETF_ACCOUNTS.forEach(acct => {
     const divS = etfAcctD[acct.id];
     Object.entries(calcEtfH(acct.id)).filter(([,h]) => h.qty > 0.0001).forEach(([stock,h]) => {
-      const cur = (divS[stock]?.cur) || h.avg;
+      const safeKey = stock.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+const cur = (divS[stock]?.cur) || etfExtraData[safeKey]?.price || h.avg;
       if (!merged[stock]) merged[stock] = { totalQty:0, curPrice:cur, accounts:[] };
       merged[stock].totalQty += h.qty;
       if (divS[stock]?.cur) merged[stock].curPrice = divS[stock].cur;
+else if (etfExtraData[safeKey]?.price) merged[stock].curPrice = etfExtraData[safeKey].price;
       merged[stock].accounts.push({ label: acct.label, qty: h.qty });
     });
   });
@@ -3148,6 +3150,8 @@ async function fetchEtfNav(stockName, safeKey, btnEl) {
     if (!nav || isNaN(nav)) throw new Error('NAV 값 없음');
     const isRealtime = !!(latest.nav && latest.nav !== '');
     saveEtfExtra(safeKey, 'nav', nav);
+    const closingPrice = parseInt(String(latest.base_pric).replace(/[^0-9]/g, ''));
+if (closingPrice) saveEtfExtra(safeKey, 'price', closingPrice);
     toast(`${stockName} NAV: ${fmt(nav)}원 ${isRealtime ? '(실시간)' : '(전일기준)'}`);
   } catch(err) {
     console.error('NAV 조회 실패:', stockName, err.message);
@@ -3194,6 +3198,8 @@ async function etfAutoFetch() {
       const nav = parseFloat(String(navRaw).replace(/^[+-]/, ''));
       if (!nav || isNaN(nav)) throw new Error('파싱 실패');
       saveEtfExtra(safeKey, 'nav', nav);
+      const closingPrice = parseInt(String(latest.base_pric).replace(/[^0-9]/g, ''));
+if (closingPrice) saveEtfExtra(safeKey, 'price', closingPrice);
       ok++;
     } catch(err) {
       console.error(name, 'NAV 실패:', err.message);
