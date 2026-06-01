@@ -4208,6 +4208,14 @@ function saveWatchField(id, field, value) {
       body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopLoss||null, target: value})
     }).catch(()=>{});
   }
+  if (field === 'stopLoss') {
+  const PROXY = 'https://stock-manager-hong.ngrok.app';
+  fetch(`${PROXY}/api/alerts`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: value, target: w.target||null})
+  }).catch(()=>{});
+}
 }
 
 function updateWatchTargetDisplay(id) {
