@@ -4222,7 +4222,7 @@ function saveWatchField(id, field, value) {
     body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: value, target: w.target||null, supportPrice: w.supportPrice||null})
   }).catch(()=>{});
 }
-  if (field === 'supportPrice') {
+  if (field === 'horizPrice' || field === 'supportPrice') {
   const PROXY = 'https://stock-manager-hong.ngrok.app';
   fetch(`${PROXY}/api/alerts`, {
     method: 'POST',
