@@ -4227,7 +4227,7 @@ function saveWatchField(id, field, value) {
   fetch(`${PROXY}/api/alerts`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopPrice||null, target: w.target||null, supportPrice: value})
+    body: JSON.stringify({code: w.ticker.replace(/\.(KS|KQ)$/i, ''), name: w.stock, stopLoss: w.stopPrice||null, target: w.target||null, supportPrice: w.supportPrice||null, horizPrice: value})
   }).catch(()=>{});
 }
 }
