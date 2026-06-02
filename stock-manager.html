@@ -3012,7 +3012,8 @@ function toggleEtfHoldings() {
 }
 
 function renderEtfHoldingsTable() {
-  const etfExtraData = JSON.parse(localStorage.getItem('etfExtraData') || '{}'); //
+  const etfExtraData = JSON.parse(localStorage.getItem('etfExtraData') || '{}');
+  const merged = {};
   ETF_ACCOUNTS.forEach(acct => {
     const divS = etfAcctD[acct.id];
     Object.entries(calcEtfH(acct.id)).filter(([,h]) => h.qty > 0.0001).forEach(([stock,h]) => {
