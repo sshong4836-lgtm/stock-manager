@@ -6066,6 +6066,28 @@ setTimeout(() => {
     setTimeout(syncSubscribedCodes, 2000);
   }
 }, 1000);
+
+// 페이지 로드 시 watchlist 전체를 /api/alerts에 일괄 동기화
+(function syncAllAlertsOnLoad() {
+  const PROXY = 'https://stock-manager-hong.ngrok.app';
+  const items = _safeArr('sm-watchlist');
+  items.forEach(w => {
+    if (!w.ticker) return;
+    const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
+    fetch(`${PROXY}/api/alerts`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        code,
+        name: w.stock,
+        stopLoss: w.stopPrice || null,
+        target: w.target || null,
+        supportPrice: w.supportPrice || null,
+        horizPrice: w.horizPrice || null
+      })
+    }).catch(() => {});
+  });
+})();
 </script>
 </body>
 </html>
