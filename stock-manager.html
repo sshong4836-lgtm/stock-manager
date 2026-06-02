@@ -1361,9 +1361,11 @@
 // ══════════════════════════════════════════════════════
 // 데이터 / 스토리지
 // ══════════════════════════════════════════════════════
-let journals        = JSON.parse(localStorage.getItem('sm-journals')     || '[]');
-let dayTrades       = JSON.parse(localStorage.getItem('sm-daytrades')    || '[]');
-let futuresData     = JSON.parse(localStorage.getItem('sm-futures')      || '[]');
+const _safeArr = (key, fallback=[]) => { try { const v = JSON.parse(localStorage.getItem(key)); return Array.isArray(v) ? v : fallback; } catch(e) { return fallback; } };
+const _safeObj = (key, fallback={}) => { try { const v = JSON.parse(localStorage.getItem(key)); return (v && typeof v==='object' && !Array.isArray(v)) ? v : fallback; } catch(e) { return fallback; } };
+let journals        = _safeArr('sm-journals');
+let dayTrades       = _safeArr('sm-daytrades');
+let futuresData     = _safeArr('sm-futures');
 
 // ── ETF 계좌별 통합 관리 ──
 const ETF_ACCOUNTS = [
@@ -1375,21 +1377,20 @@ const ETF_ACCOUNTS = [
 ];
 const etfAcctJ = {}, etfAcctD = {};
 ETF_ACCOUNTS.forEach(a => {
-  etfAcctJ[a.id] = JSON.parse(localStorage.getItem(a.jKey) || '[]');
-  etfAcctD[a.id] = JSON.parse(localStorage.getItem(a.dKey) || '{}');
+  etfAcctJ[a.id] = _safeArr(a.jKey);
+  etfAcctD[a.id] = _safeObj(a.dKey);
 });
-let portfolioMeta   = JSON.parse(localStorage.getItem('sm-pmeta')        || '{}');
-let portfolioManual = JSON.parse(localStorage.getItem('sm-pmanual')      || '[]');
-let portfolioAccountFilter = 'all'; // 포트폴리오 계좌 필터: 'all' | '삼성' | '키움' | 'NH'
+let portfolioMeta   = _safeObj('sm-pmeta');
+let portfolioManual = _safeArr('sm-pmanual');
+let portfolioAccountFilter = 'all';
 let _partialSellData = null;
-let _watchSearchPrice = 0;  // searchWatchTicker에서 조회한 현재가 임시 보관
-let watchlist       = JSON.parse(localStorage.getItem('sm-watchlist')    || '[]');
-let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]');
-let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
-// 종목명 → Yahoo Finance 종목코드 매핑 (전 계좌 공유)
-let etfTickerMap    = JSON.parse(localStorage.getItem('sm-etf-tickers')  || '{}');
-let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
-let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
+let _watchSearchPrice = 0;
+let watchlist       = _safeArr('sm-watchlist');
+let etfWatchlist    = _safeArr('sm-etfwatchlist');
+let dividends       = _safeArr('sm-dividends');
+let etfTickerMap    = _safeObj('sm-etf-tickers');
+let telegramSettings = _safeObj('sm-telegram');
+let _tgSentAlerts    = _safeObj('sm-tg-sent');
 
 // ── 구데이터 마이그레이션: etfTickerMap에서 .KS/.KQ/.KN 접미사 제거 ──
 (function migrateEtfTickers() {
@@ -1469,10 +1470,11 @@ function fmtPrice(price, ticker) {
 // ★ 핵심: 매매일지 → 보유종목/평균단가 자동 계산
 // ══════════════════════════════════════════════════════
 function calcHoldingsFromJournal(acctFilter) {
-  const sorted = [...journals]
-    .map(j => ({ ...j, account: j.account || '삼성' }))
+  const sorted = (Array.isArray(journals) ? journals : [])
+    .filter(j => j && j.stock)
+    .map(j => ({ ...j, account: j.account || '삼성', date: j.date || '' }))
     .filter(j => !acctFilter || acctFilter === 'all' || j.account === acctFilter)
-    .sort((a, b) => a.date !== b.date ? a.date.localeCompare(b.date) : a.id - b.id);
+    .sort((a, b) => a.date !== b.date ? (a.date || '').localeCompare(b.date || '') : (a.id||0) - (b.id||0));
   const h = {};
   sorted.forEach(j => {
     if (!h[j.stock]) {
@@ -3033,8 +3035,6 @@ else if (etfExtraData[safeKey]?.price) merged[stock].curPrice = etfExtraData[saf
     document.getElementById('etf-holdings-table').innerHTML = '<div class="empty" style="padding:24px">보유 종목이 없습니다.</div>';
     return;
   }
-  // NAV/추적오차 저장 데이터 불러오기
-  const etfExtraData = JSON.parse(localStorage.getItem('etfExtraData') || '{}');
 
   document.getElementById('etf-holdings-table').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin:8px 0 4px">
@@ -3685,8 +3685,10 @@ function renderWatchlist() {
     (w.stock||'').toLowerCase().includes(q) ||
     (w.memo||'').toLowerCase().includes(q));
 
-  document.getElementById('w-count').textContent = `${list.length}개 종목`;
+  const countEl = document.getElementById('w-count');
   const container = document.getElementById('w-grid');
+  if (!container) { console.error('[renderWatchlist] w-grid element not found'); return; }
+  if (countEl) countEl.textContent = `${list.length}개 종목`;
   if (!list.length) {
     container.innerHTML = `<div class="empty">${_watchGroup === 'holding' ? '포트폴리오 탭에서 보유종목을 추가하세요.' : '관심종목이 없습니다.'}</div>`;
     return;
@@ -3697,6 +3699,7 @@ function renderWatchlist() {
   const holdingsPerAcct = {};
   WATCH_ACCTS.forEach(a => { holdingsPerAcct[a] = calcHoldingsFromJournal(a); });
 
+  try {
   container.innerHTML = list.map(w => {
     const sig  = w.signal || 'gray';
     const wGrp = normalizeGroup(w.group);
@@ -3996,6 +3999,11 @@ function renderWatchlist() {
       ${detailHtml}
     </div>`;
   }).join('');
+  } catch(e) {
+    console.error('[renderWatchlist] 카드 렌더링 오류:', e);
+    container.innerHTML = `<div class="empty" style="color:var(--red)">렌더링 오류: ${e.message}<br><small>브라우저 콘솔(F12)에서 상세 내용을 확인하세요.</small></div>`;
+    return;
+  }
   initWatchDragDrop();
 }
 
