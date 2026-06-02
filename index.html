@@ -3625,7 +3625,9 @@ function escAttr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
 function renderWatchlist() {
-  const q = document.getElementById('w-search').value.toLowerCase();
+  const searchEl = document.getElementById('w-search');
+  if (!searchEl) return;
+  const q = searchEl.value.toLowerCase();
 
   const normalizeGroup = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
 
@@ -5079,17 +5081,20 @@ function renderFutures() {
 }
 
 // ══════════════════════════════════════════════════════
-renderJournal();
-renderPortfolio();
-renderWatchlist();
-buildAlertList();
-loadDailyMemo();
-renderDayTrade();
-renderEtfAcctTab('nh1');
-renderEtfAllSummary();
-setInterval(updateClock, 1000);
-updateClock();
-initJournalWatchDropdown();
+(function initRender() {
+  const safe = (fn, name) => { try { fn(); } catch(e) { console.error('[init] ' + name + ':', e); } };
+  safe(renderJournal,          'renderJournal');
+  safe(renderPortfolio,        'renderPortfolio');
+  safe(renderWatchlist,        'renderWatchlist');
+  safe(buildAlertList,         'buildAlertList');
+  safe(loadDailyMemo,          'loadDailyMemo');
+  safe(renderDayTrade,         'renderDayTrade');
+  safe(() => renderEtfAcctTab('nh1'), 'renderEtfAcctTab');
+  safe(renderEtfAllSummary,    'renderEtfAllSummary');
+  setInterval(updateClock, 1000);
+  updateClock();
+  safe(initJournalWatchDropdown, 'initJournalWatchDropdown');
+})();
 
 // ══════════════════════════════════════════════════════
 // ETF 관심종목
