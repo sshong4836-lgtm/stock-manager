@@ -275,7 +275,7 @@ app.post('/subscribe', (req, res) => {
 
 // 여러 탭 종목을 한번에 업데이트
 app.post('/watchlist', (req, res) => {
-  const { groups, watch2Config } = req.body; // { holding: [...], watch1: [...], watch2: [...], ready: [...] }
+  const { groups, watch2Config, watch2Settings } = req.body;
   if (!groups || typeof groups !== 'object') {
     return res.status(400).json({ error: 'groups 객체 필요' });
   }
@@ -284,6 +284,9 @@ app.post('/watchlist', (req, res) => {
   });
   if (watch2Config && typeof watch2Config.minAlertCount === 'number') {
     watchlistGroups.watch2Config = watch2Config;
+  }
+  if (watch2Settings && typeof watch2Settings === 'object') {
+    watchlistGroups.watch2Settings = watch2Settings;
   }
   saveWatchlist();
   if (kiwoomWs && kiwoomWs.readyState === 1) {
@@ -638,11 +641,12 @@ function getStockName(code) {
 async function analyzeWatch2() {
   watchlistGroups = loadWatchlist();
   const codes = watchlistGroups.watch2 || [];
-  const minAlertCount = watchlistGroups.watch2Config?.minAlertCount ?? 2;
+  const globalMinAlertCount = watchlistGroups.watch2Config?.minAlertCount ?? 2;
+  const watch2Settings = watchlistGroups.watch2Settings || {};
 
   if (!codes.length) { console.log('📊 watch2 종목 없음'); return; }
   if (!currentToken) { console.log('❌ 토큰 없음, watch2 분석 스킵'); return; }
-  console.log(`📊 watch2 분석 시작 (${codes.length}종목, 최소 ${minAlertCount}개 조건 충족 시 알림)`);
+  console.log(`📊 watch2 분석 시작 (${codes.length}종목)`);
 
   for (const code of codes) {
     try {
@@ -653,6 +657,15 @@ async function analyzeWatch2() {
         continue;
       }
 
+      // 종목별 조건 설정 (설정 미전달 시 모두 활성화)
+      const cfg = watch2Settings[code];
+      const useRsi         = !cfg || !!cfg.rsi;
+      const useVolume      = !cfg || !!cfg.volume;
+      const useBullish     = !cfg || !!cfg.bullish;
+      const useGoldenCross = !cfg || !!cfg.goldenCross;
+      const useMaAlignment = !cfg || !!cfg.maAlignment;
+      const minAlertCount  = cfg?.minAlertCount ?? globalMinAlertCount;
+
       // ka10081은 최신→과거 순 반환 → reverse로 오래된 것 먼저
       const candles = [...raw].reverse();
       const n = candles.length;
@@ -662,8 +675,8 @@ async function analyzeWatch2() {
 
       const triggered = [];
 
-      // 1. RSI(14) 과매도(30이하) 탈출
-      if (n >= 16) {
+      // 1. RSI(14) 과매도(30이하) 탈출 (Wilder smoothing 신뢰도를 위해 최소 50개 필요)
+      if (useRsi && n >= 50) {
         const rsiPrev = calcRSI(closes.slice(0, -1));
         const rsiCurr = calcRSI(closes);
         if (rsiPrev !== null && rsiCurr !== null && rsiPrev <= 30 && rsiCurr > 30)
@@ -679,23 +692,23 @@ async function analyzeWatch2() {
       const ma20p = calcMA(closes.slice(0, -1), 20);
 
       // 2. 정배열 (MA5>MA20>MA60>MA120)
-      if (ma5 && ma20 && ma60 && ma120 && ma5 > ma20 && ma20 > ma60 && ma60 > ma120)
+      if (useMaAlignment && ma5 && ma20 && ma60 && ma120 && ma5 > ma20 && ma20 > ma60 && ma60 > ma120)
         triggered.push(`정배열 (MA5>${ma5.toFixed(0)} MA20>${ma20.toFixed(0)} MA60>${ma60.toFixed(0)} MA120>${ma120.toFixed(0)})`);
 
       // 3. 골든크로스 (MA5가 MA20 상향돌파)
-      if (ma5 !== null && ma20 !== null && ma5p !== null && ma20p !== null && ma5p <= ma20p && ma5 > ma20)
+      if (useGoldenCross && ma5 !== null && ma20 !== null && ma5p !== null && ma20p !== null && ma5p <= ma20p && ma5 > ma20)
         triggered.push(`골든크로스 (MA5 ${ma5.toFixed(0)} ↑ MA20 ${ma20.toFixed(0)})`);
 
-      // 4. 양봉 전환 (전일 음봉 → 당일 양봉)
-      if (opens[n-2] > 0 && opens[n-1] > 0) {
+      // 4. 양봉 전환 (전일 음봉 → 당일 양봉, 도지 제외)
+      if (useBullish && opens[n-2] > 0 && opens[n-1] > 0) {
         const prevBear = closes[n-2] < opens[n-2];
-        const currBull = closes[n-1] >= opens[n-1];
+        const currBull = closes[n-1] > opens[n-1];
         if (prevBear && currBull) triggered.push(`양봉 전환 (전일 음봉→당일 양봉)`);
       }
 
-      // 5. 거래량 급증 (전일 대비 200% 이상)
-      if (volumes[n-2] > 0 && volumes[n-1] >= volumes[n-2] * 2)
-        triggered.push(`거래량 급증 (${(volumes[n-1] / volumes[n-2] * 100).toFixed(0)}%)`);
+      // 5. 거래량 급증 (전일의 2배 이상)
+      if (useVolume && volumes[n-2] > 0 && volumes[n-1] >= volumes[n-2] * 2)
+        triggered.push(`거래량 급증 (전일의 ${(volumes[n-1] / volumes[n-2]).toFixed(1)}배)`);
 
       console.log(`📊 ${code}: ${triggered.length}/${minAlertCount}개 조건 [${triggered.join(', ') || '없음'}]`);
 

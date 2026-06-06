@@ -3851,7 +3851,7 @@ function renderWatchlist() {
               <div class="alert-checks-grid">
                 ${[
                   ['alertRsiOversold', '📈 RSI 과매도 탈출 시 알림'],
-                  ['alertVolume',      '📊 거래량 급증 시 알림 (전일 대비 200% 이상)'],
+                  ['alertVolume',      '📊 거래량 급증 시 알림 (전일의 2배 이상)'],
                   ['alertBullish',     '🕯 양봉 전환 시 알림'],
                   ['alertGoldenCross', '🌟 골든크로스 시 알림'],
                   ['alertMaAlignment', '📐 이동평균선 정배열 진입 시 알림 (5일>20일>60일>120일)'],
@@ -4220,14 +4220,27 @@ function updateTrendlineDisplay(id) {
 // ── watch2 그룹을 서버 watchlist.json과 동기화 ──
 function syncWatch2ToServer() {
   const proxyUrl = (kiwoomSettings.proxyUrl || 'https://stock-manager-hong.ngrok.app').replace(/\/$/, '');
-  const codes = watchlist
-    .filter(w => normalizeGroup(w.group) === 'watch2' && w.ticker)
+  const items = watchlist.filter(w => normalizeGroup(w.group) === 'watch2' && w.ticker);
+  const codes = items
     .map(w => w.ticker.replace(/\.(KS|KQ)$/i, ''))
     .filter(c => /^\d{6}$/.test(c));
+  const watch2Settings = {};
+  items.forEach(w => {
+    const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
+    if (!/^\d{6}$/.test(code)) return;
+    watch2Settings[code] = {
+      rsi:          !!w.alertRsiOversold,
+      volume:       !!w.alertVolume,
+      bullish:      !!w.alertBullish,
+      goldenCross:  !!w.alertGoldenCross,
+      maAlignment:  !!w.alertMaAlignment,
+      minAlertCount: w.minAlertCount || 2
+    };
+  });
   fetch(`${proxyUrl}/watchlist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groups: { watch2: codes } })
+    body: JSON.stringify({ groups: { watch2: codes }, watch2Settings })
   }).catch(() => {});
 }
 
