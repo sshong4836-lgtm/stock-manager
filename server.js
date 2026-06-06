@@ -19,7 +19,7 @@ let wsGeneration = 0;
 // 탭별 종목 코드 저장소
 const WATCHLIST_FILE = '/Users/hong/proxy/watchlist.json';
 function loadWatchlist() {
-  try { return JSON.parse(require('fs').readFileSync(WATCHLIST_FILE, 'utf8')); } catch(e) { return {holding:[],watch1:[],watch2:[],ready:[]}; }
+  try { return JSON.parse(require('fs').readFileSync(WATCHLIST_FILE, 'utf8')); } catch(e) { return {holding:[],watch1:[],watch2:[],ready:[],watch2Config:{minAlertCount:2}}; }
 }
 function saveWatchlist() {
   require('fs').writeFileSync(WATCHLIST_FILE, JSON.stringify(watchlistGroups, null, 2));
@@ -275,14 +275,17 @@ app.post('/subscribe', (req, res) => {
 
 // 여러 탭 종목을 한번에 업데이트
 app.post('/watchlist', (req, res) => {
-  const { groups } = req.body; // { holding: [...], watch1: [...], watch2: [...], ready: [...] }
+  const { groups, watch2Config } = req.body; // { holding: [...], watch1: [...], watch2: [...], ready: [...] }
   if (!groups || typeof groups !== 'object') {
     return res.status(400).json({ error: 'groups 객체 필요' });
   }
   ['holding', 'watch1', 'watch2', 'ready'].forEach(key => {
     if (Array.isArray(groups[key])) watchlistGroups[key] = groups[key];
-      saveWatchlist();
   });
+  if (watch2Config && typeof watch2Config.minAlertCount === 'number') {
+    watchlistGroups.watch2Config = watch2Config;
+  }
+  saveWatchlist();
   if (kiwoomWs && kiwoomWs.readyState === 1) {
     subscribeAllCodes();
   }
@@ -356,9 +359,26 @@ let marketCapSnapshot = (() => {
   catch(e) { return { date: null, kospi: [], kosdaq: [] }; }
 })();
 const _mcAlertsToday = { kospi: new Set(), kosdaq: new Set() };
+// 서버 재시작 시 오늘 이미 보낸 알림 복원
+{
+  const _today = new Date().toISOString().split('T')[0];
+  if (marketCapSnapshot.date === _today && marketCapSnapshot.alertsSentToday) {
+    (marketCapSnapshot.alertsSentToday.kospi  || []).forEach(cd => _mcAlertsToday.kospi.add(cd));
+    (marketCapSnapshot.alertsSentToday.kosdaq || []).forEach(cd => _mcAlertsToday.kosdaq.add(cd));
+    console.log(`♻️  오늘 발송된 시총알림 복원: 코스피 ${_mcAlertsToday.kospi.size}건, 코스닥 ${_mcAlertsToday.kosdaq.size}건`);
+  }
+}
 
 function saveMarketCapSnapshot(data) {
   fs.writeFileSync(MARKET_CAP_FILE, JSON.stringify(data, null, 2));
+}
+
+function saveAlertsToday() {
+  marketCapSnapshot.alertsSentToday = {
+    kospi:  [..._mcAlertsToday.kospi],
+    kosdaq: [..._mcAlertsToday.kosdaq]
+  };
+  saveMarketCapSnapshot(marketCapSnapshot);
 }
 
 // 네이버 파이낸스로 시총 순위 조회 (키움 REST API에 시총순위 전용 API 없음)
@@ -431,22 +451,25 @@ async function refreshMarketCap() {
     ]);
     if (!kospiList.length && !kosdaqList.length) return;
 
-    // 날짜 바뀌면 일중 중복알림 set 초기화
+    // 날짜 바뀌면 일중 중복알림 set + 파일 초기화
     if (marketCapSnapshot.date && marketCapSnapshot.date !== today) {
       _mcAlertsToday.kospi.clear();
       _mcAlertsToday.kosdaq.clear();
+      marketCapSnapshot.alertsSentToday = { kospi: [], kosdaq: [] };
     }
 
     const prevKospiSet  = new Set((marketCapSnapshot.kospi  || []).map(s => s.stk_cd).filter(Boolean));
     const prevKosdaqSet = new Set((marketCapSnapshot.kosdaq || []).map(s => s.stk_cd).filter(Boolean));
 
     // 신규 진입 감지 (전일 스냅샷 있을 때만 알림)
+    let anyNewAlert = false;
     if (marketCapSnapshot.kospi.length > 0) {
       const newKospi = kospiList.filter(s => s.stk_cd && !prevKospiSet.has(s.stk_cd) && !_mcAlertsToday.kospi.has(s.stk_cd));
       if (newKospi.length > 0) {
         newKospi.forEach(s => _mcAlertsToday.kospi.add(s.stk_cd));
         const names = newKospi.map(s => `${s.stk_nm}(${s.stk_cd})`).join(', ');
         await sendTelegram(`📈 [코스피 시총 TOP100 신규진입]\n${names}`);
+        anyNewAlert = true;
       }
     }
     if (marketCapSnapshot.kosdaq.length > 0) {
@@ -455,8 +478,10 @@ async function refreshMarketCap() {
         newKosdaq.forEach(s => _mcAlertsToday.kosdaq.add(s.stk_cd));
         const names = newKosdaq.map(s => `${s.stk_nm}(${s.stk_cd})`).join(', ');
         await sendTelegram(`📈 [코스닥 시총 TOP20 신규진입]\n${names}`);
+        anyNewAlert = true;
       }
     }
+    if (anyNewAlert) saveAlertsToday();
 
     marketCapCache = {
       kospi:  kospiList.map(s => ({ ...s, isNew: !prevKospiSet.has(s.stk_cd) })),
@@ -470,16 +495,70 @@ async function refreshMarketCap() {
   }
 }
 
-// 장마감(15:35~15:45) 시 전일 스냅샷 저장
-function _mcSaveSnapshotIfClose() {
+async function sendTop10ChangeAlert(prevList, currList) {
+  const prev10 = [...prevList].sort((a, b) => a.rank - b.rank).slice(0, 10);
+  const curr10 = [...currList].sort((a, b) => a.rank - b.rank).slice(0, 10);
+  if (!prev10.length || !curr10.length) return;
+
+  const prevRankMap = new Map(prev10.map(s => [s.stk_cd, s.rank]));
+  const prevCodes   = new Set(prev10.map(s => s.stk_cd));
+  const currCodes   = new Set(curr10.map(s => s.stk_cd));
+
+  let hasChange = false;
+  const lines = ['📊 코스피 시총 TOP10 변동'];
+
+  for (const s of curr10) {
+    const cr = s.rank;
+    if (!prevCodes.has(s.stk_cd)) {
+      lines.push(`🆕 ${cr}위 ${s.stk_nm} (신규진입)`);
+      hasChange = true;
+    } else {
+      const pr = prevRankMap.get(s.stk_cd);
+      const diff = pr - cr;  // 양수 = 순위 상승
+      if (diff === 0) {
+        lines.push(`${cr}위 ${s.stk_nm} → 변동없음`);
+      } else if (diff > 0) {
+        lines.push(`${cr}위 ${s.stk_nm} ↑${diff} (${pr}위→${cr}위)`);
+        hasChange = true;
+      } else {
+        lines.push(`${cr}위 ${s.stk_nm} ↓${Math.abs(diff)} (${pr}위→${cr}위)`);
+        hasChange = true;
+      }
+    }
+  }
+
+  for (const s of prev10) {
+    if (!currCodes.has(s.stk_cd)) {
+      lines.push(`❌ ${s.stk_nm} TOP10 이탈`);
+      hasChange = true;
+    }
+  }
+
+  if (!hasChange) return;
+  await sendTelegram(lines.join('\n'));
+}
+
+// 장마감(15:35~15:45) 시 TOP10 변동 알림 + 전일 스냅샷 저장
+async function _mcSaveSnapshotIfClose() {
   const h = new Date().getHours(), m = new Date().getMinutes();
   if (h === 15 && m >= 35 && m <= 45 && marketCapCache.kospi.length > 0) {
     const today = new Date().toISOString().split('T')[0];
     if (!marketCapSnapshot.date || marketCapSnapshot.date !== today) {
+      // 전일 스냅샷이 있을 때만 TOP10 변동 알림
+      if (marketCapSnapshot.kospi && marketCapSnapshot.kospi.length > 0) {
+        await sendTop10ChangeAlert(
+          marketCapSnapshot.kospi,
+          marketCapCache.kospi.map(({ isNew, ...s }) => s)
+        );
+      }
       marketCapSnapshot = {
         date: today,
         kospi:  marketCapCache.kospi.map(({ isNew, ...s }) => s),
-        kosdaq: marketCapCache.kosdaq.map(({ isNew, ...s }) => s)
+        kosdaq: marketCapCache.kosdaq.map(({ isNew, ...s }) => s),
+        alertsSentToday: {
+          kospi:  [..._mcAlertsToday.kospi],
+          kosdaq: [..._mcAlertsToday.kosdaq]
+        }
       };
       saveMarketCapSnapshot(marketCapSnapshot);
       console.log(`📸 시총순위 전일 스냅샷 저장 (${today})`);
@@ -501,10 +580,158 @@ app.get('/api/market-cap', async (req, res) => {
 // 장중(9:05~15:35) 5분마다 자동 갱신
 setInterval(() => {
   const h = new Date().getHours(), m = new Date().getMinutes();
-  const isMarket = (h === 9 && m >= 5) || (h > 9 && h < 15) || (h === 15 && m <= 35);
+  const isMarket = (h === 9 && m >= 5) || (h > 9 && h < 15) || (h === 15 && m < 35);
   if (isMarket) refreshMarketCap();
   _mcSaveSnapshotIfClose();
 }, 5 * 60 * 1000);
+
+// ===== watch2 그룹 알림 시스템 =====
+
+async function fetchDailyCandles(code) {
+  const now = new Date();
+  const baseDt = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const r = await axios.post(`${BASE_URL}/api/dostk/chart`, {
+    stk_cd: code,
+    base_dt: baseDt,
+    upd_stkpc_tp: '1'
+  }, {
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      'authorization': `Bearer ${currentToken}`,
+      'api-id': 'ka10081'
+    },
+    timeout: 10000
+  });
+  return r.data.stk_dt_pole_chart_qry || [];
+}
+
+function calcRSI(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = closes[i] - closes[i-1];
+    if (diff > 0) avgGain += diff; else avgLoss -= diff;
+  }
+  avgGain /= period; avgLoss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i-1];
+    avgGain = (avgGain * (period-1) + Math.max(diff, 0)) / period;
+    avgLoss = (avgLoss * (period-1) + Math.max(-diff, 0)) / period;
+  }
+  if (avgLoss === 0) return 100;
+  return 100 - 100 / (1 + avgGain / avgLoss);
+}
+
+function calcMA(closes, period) {
+  if (closes.length < period) return null;
+  return closes.slice(-period).reduce((a, b) => a + b, 0) / period;
+}
+
+function getStockName(code) {
+  const all = [...(marketCapCache.kospi || []), ...(marketCapCache.kosdaq || [])];
+  const found = all.find(s => s.stk_cd === code);
+  if (found) return found.stk_nm;
+  if (alerts[code]) return alerts[code].name;
+  return code;
+}
+
+async function analyzeWatch2() {
+  watchlistGroups = loadWatchlist();
+  const codes = watchlistGroups.watch2 || [];
+  const minAlertCount = watchlistGroups.watch2Config?.minAlertCount ?? 2;
+
+  if (!codes.length) { console.log('📊 watch2 종목 없음'); return; }
+  if (!currentToken) { console.log('❌ 토큰 없음, watch2 분석 스킵'); return; }
+  console.log(`📊 watch2 분석 시작 (${codes.length}종목, 최소 ${minAlertCount}개 조건 충족 시 알림)`);
+
+  for (const code of codes) {
+    try {
+      await new Promise(r => setTimeout(r, 400)); // API rate limit
+      const raw = await fetchDailyCandles(code);
+      if (!Array.isArray(raw) || raw.length < 21) {
+        console.log(`⚠️ ${code} 데이터 부족 (${raw?.length || 0}개)`);
+        continue;
+      }
+
+      // ka10081은 최신→과거 순 반환 → reverse로 오래된 것 먼저
+      const candles = [...raw].reverse();
+      const n = candles.length;
+      const closes  = candles.map(c => Math.abs(parseFloat(c.cur_prc || 0)));
+      const opens   = candles.map(c => Math.abs(parseFloat(c.open_pric || 0)));
+      const volumes = candles.map(c => parseFloat(c.trde_qty || 0));
+
+      const triggered = [];
+
+      // 1. RSI(14) 과매도(30이하) 탈출
+      if (n >= 16) {
+        const rsiPrev = calcRSI(closes.slice(0, -1));
+        const rsiCurr = calcRSI(closes);
+        if (rsiPrev !== null && rsiCurr !== null && rsiPrev <= 30 && rsiCurr > 30)
+          triggered.push(`RSI 과매도 탈출 (${rsiCurr.toFixed(1)})`);
+      }
+
+      // MA 계산
+      const ma5   = calcMA(closes, 5);
+      const ma20  = calcMA(closes, 20);
+      const ma60  = calcMA(closes, 60);
+      const ma120 = calcMA(closes, 120);
+      const ma5p  = calcMA(closes.slice(0, -1), 5);
+      const ma20p = calcMA(closes.slice(0, -1), 20);
+
+      // 2. 정배열 (MA5>MA20>MA60>MA120)
+      if (ma5 && ma20 && ma60 && ma120 && ma5 > ma20 && ma20 > ma60 && ma60 > ma120)
+        triggered.push(`정배열 (MA5>${ma5.toFixed(0)} MA20>${ma20.toFixed(0)} MA60>${ma60.toFixed(0)} MA120>${ma120.toFixed(0)})`);
+
+      // 3. 골든크로스 (MA5가 MA20 상향돌파)
+      if (ma5 !== null && ma20 !== null && ma5p !== null && ma20p !== null && ma5p <= ma20p && ma5 > ma20)
+        triggered.push(`골든크로스 (MA5 ${ma5.toFixed(0)} ↑ MA20 ${ma20.toFixed(0)})`);
+
+      // 4. 양봉 전환 (전일 음봉 → 당일 양봉)
+      if (opens[n-2] > 0 && opens[n-1] > 0) {
+        const prevBear = closes[n-2] < opens[n-2];
+        const currBull = closes[n-1] >= opens[n-1];
+        if (prevBear && currBull) triggered.push(`양봉 전환 (전일 음봉→당일 양봉)`);
+      }
+
+      // 5. 거래량 급증 (전일 대비 200% 이상)
+      if (volumes[n-2] > 0 && volumes[n-1] >= volumes[n-2] * 2)
+        triggered.push(`거래량 급증 (${(volumes[n-1] / volumes[n-2] * 100).toFixed(0)}%)`);
+
+      console.log(`📊 ${code}: ${triggered.length}/${minAlertCount}개 조건 [${triggered.join(', ') || '없음'}]`);
+
+      if (triggered.length >= minAlertCount) {
+        const name = getStockName(code);
+        const price = closes[n-1];
+        await sendTelegram(
+          `📊 [Watch2 알림] ${name}(${code})\n` +
+          triggered.map((t, i) => `${i+1}. ${t}`).join('\n') +
+          `\n현재가: ${price.toLocaleString()}원`
+        );
+      }
+    } catch(e) {
+      console.log(`❌ watch2 분석 실패 (${code}):`, e.message);
+    }
+  }
+  console.log('✅ watch2 분석 완료');
+}
+
+// 08:50 자동 실행 스케줄러 (장 시작 전 분석)
+let _watch2RanDate = null;
+setInterval(() => {
+  const now = new Date();
+  const dateKey = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+  if (now.getHours() === 8 && now.getMinutes() === 50 && _watch2RanDate !== dateKey) {
+    _watch2RanDate = dateKey;
+    console.log('⏰ 08:50 watch2 일봉 분석 자동 실행');
+    analyzeWatch2().catch(e => console.log('❌ watch2 스케줄 오류:', e.message));
+  }
+}, 60 * 1000);
+
+// 수동 실행 엔드포인트
+app.post('/api/watch2/analyze', async (req, res) => {
+  res.json({ status: 'started', message: 'watch2 분석 시작' });
+  analyzeWatch2().catch(e => console.log('❌ watch2 수동 분석 오류:', e.message));
+});
 
 app.listen(3000, async () => {
   console.log('✅ 프록시 서버 실행중 : 포트 3000');

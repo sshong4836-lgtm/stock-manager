@@ -3421,18 +3421,22 @@ function updateWatchFormBuyFields() {
 function moveWatchToReady(id) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
+  const wasWatch2 = normalizeGroup(w.group) === 'watch2';
   w.group = 'ready';
   save('watchlist', watchlist);
   renderWatchlist();
+  if (wasWatch2) syncWatch2ToServer();
   toast(`${w.stock}을(를) 매수대기로 이동했습니다.`);
 }
 
 function moveWatchToHolding(id) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
+  const wasWatch2 = normalizeGroup(w.group) === 'watch2';
   w.group = 'holding';
   save('watchlist', watchlist);
   renderWatchlist();
+  if (wasWatch2) syncWatch2ToServer();
   toast(`${w.stock}을(를) 보유종목으로 이동했습니다.`);
 }
 
@@ -3440,18 +3444,22 @@ function confirmMoveToHolding(id) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
   if (!confirm(`${w.stock} 종목을 보유종목으로 이동하시겠습니까?`)) return;
+  const wasWatch2 = normalizeGroup(w.group) === 'watch2';
   w.group = 'holding';
   save('watchlist', watchlist);
   renderWatchlist();
+  if (wasWatch2) syncWatch2ToServer();
   toast(`${w.stock}을(를) 보유종목으로 이동했습니다.`);
 }
 
 function moveWatchBackTo(id, group) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
+  const wasWatch2 = normalizeGroup(w.group) === 'watch2';
   w.group = group;
   save('watchlist', watchlist);
   renderWatchlist();
+  if (wasWatch2 || group === 'watch2') syncWatch2ToServer();
   toast(`${w.stock}을(를) ${group === 'watch1' ? '관찰1' : '관찰2'}로 이동했습니다.`);
 }
 
@@ -3550,6 +3558,7 @@ function addWatch() {
   watchlist.unshift(item);
   save('watchlist', watchlist);
   renderWatchlist();
+  if (group === 'watch2') syncWatch2ToServer();
   ['w-stock','w-ticker','w-buy-amount','w-buy-qty','w-buy-date'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('w-buy-account').value = '삼성';
   document.getElementById('w-group').value = 'watch1';
@@ -3561,9 +3570,11 @@ function deleteWatch(id) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
   if (!confirm(`'${w.stock}'을(를) 삭제할까요?`)) return;
+  const wasWatch2 = normalizeGroup(w.group) === 'watch2';
   watchlist = watchlist.filter(x => x.id !== id);
   save('watchlist', watchlist);
   renderWatchlist();
+  if (wasWatch2) syncWatch2ToServer();
 }
 
 async function fetchSingleWatchPrice(id) {
@@ -4206,12 +4217,27 @@ function updateTrendlineDisplay(id) {
   }
 }
 
+// ── watch2 그룹을 서버 watchlist.json과 동기화 ──
+function syncWatch2ToServer() {
+  const proxyUrl = (kiwoomSettings.proxyUrl || 'https://stock-manager-hong.ngrok.app').replace(/\/$/, '');
+  const codes = watchlist
+    .filter(w => normalizeGroup(w.group) === 'watch2' && w.ticker)
+    .map(w => w.ticker.replace(/\.(KS|KQ)$/i, ''))
+    .filter(c => /^\d{6}$/.test(c));
+  fetch(`${proxyUrl}/watchlist`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groups: { watch2: codes } })
+  }).catch(() => {});
+}
+
 // ── 상세패널 필드 저장 (리렌더 없이 in-place 저장) ──
 function saveWatchField(id, field, value) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
   w[field] = value;
   save('watchlist', watchlist);
+  if (field === 'group') syncWatch2ToServer();
   if (['trendH1Date','trendH1Price','trendH2Date','trendH2Price'].includes(field)) {
     updateTrendlineDisplay(id);
   }
