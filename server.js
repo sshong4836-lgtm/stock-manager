@@ -4,17 +4,23 @@ const axios = require('axios');
 const WebSocket = require('ws');
 const fs = require('fs');
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'api-id']
+}));
 app.use(express.json());
 
 const BASE_URL = 'https://api.kiwoom.com';
 const cfg = JSON.parse(fs.readFileSync('/Users/hong/proxy/config.json','utf8'));
 
 let kiwoomWs = null;
-let currentToken = null;
+let currentToken = null;    // OAuth2 access token (REST API용)
+let wsApprovalKey = null;   // WebSocket 접속허용토큰 (WS LOGIN용)
 let sseClients = [];
 let realtimePrices = {};
 let wsGeneration = 0;
+let _wsLoginTime = 0;       // 마지막 WS 로그인 성공 시각 (손절가 재시작 초기화용)
 
 // 탭별 종목 코드 저장소
 const WATCHLIST_FILE = '/Users/hong/proxy/watchlist.json';
@@ -38,12 +44,15 @@ function saveAlerts() {
 let alerts = loadAlerts();
 let alertCooldown = {}; // { "stockCode_stop" | "stockCode_target": timestamp }
 
+const https = require('https');
+const ipv4Agent = new https.Agent({ family: 4 });
+
 async function sendTelegram(message) {
   try {
     await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       chat_id: TELEGRAM_CHAT_ID,
       text: message
-    });
+    }, { httpsAgent: ipv4Agent, timeout: 10000 });
     console.log('📨 텔레그램 발송:', message);
   } catch(e) {
     console.log('❌ 텔레그램 발송 실패:', e.message);
@@ -51,11 +60,22 @@ async function sendTelegram(message) {
 }
 
 function checkAlerts(code, price) {
-  console.log(`🔍 체크: code=${code} price=${price} alertKeys=${JSON.stringify(Object.keys(alerts))}`);
   const alert = alerts[code];
   if (!alert) return;
   const now = Date.now();
   const cooldownMs = 60 * 60 * 1000;
+
+  // 재시작 후 2분 이내: 이미 이탈 상태이면 쿨다운만 기록하고 알림 생략
+  if (_wsLoginTime > 0 && now - _wsLoginTime < 120000) {
+    if (alert.stopLoss && price <= alert.stopLoss && !alertCooldown[`${code}_stop`]) {
+      alertCooldown[`${code}_stop`] = now;
+      console.log(`⏭️ 재시작 초기화: [${alert.name}] 손절가 이탈 상태 기록 (알림 생략)`);
+    }
+    if (alert.supportPrice && price <= alert.supportPrice && !alertCooldown[`${code}_support`]) {
+      alertCooldown[`${code}_support`] = now;
+      console.log(`⏭️ 재시작 초기화: [${alert.name}] 지지선 이탈 상태 기록 (알림 생략)`);
+    }
+  }
 
   if (alert.stopLoss && price <= alert.stopLoss) {
     const key = `${code}_stop`;
@@ -67,14 +87,27 @@ function checkAlerts(code, price) {
 
   if (alert.target && price >= alert.target) {
     const key = `${code}_target`;
+    const hitCount = alertCooldown[key + '_count'] || 0;
+    if (hitCount === 0) {
+      alertCooldown[key] = now;
+      alertCooldown[key + '_count'] = 1;
+      console.log(`🎯 목표가 1차 알림! ${alert.name} price=${price}`);
+      sendTelegram(`🎯 [${alert.name}] 목표가 도달! 현재가 ${price.toLocaleString()}원 (목표가 ${alert.target.toLocaleString()}원)`);
+    } else if (hitCount === 1 && now - alertCooldown[key] >= cooldownMs) {
+      alertCooldown[key + '_count'] = 2;
+      console.log(`🎯 목표가 2차 알림! ${alert.name} price=${price}`);
+      sendTelegram(`🎯 [${alert.name}] 목표가 1시간 유지! 현재가 ${price.toLocaleString()}원 (목표가 ${alert.target.toLocaleString()}원)`);
+    }
+  }
+
+  if (alert.supportPrice && price <= alert.supportPrice) {
+    const key = `${code}_support`;
     if (!alertCooldown[key] || now - alertCooldown[key] >= cooldownMs) {
       alertCooldown[key] = now;
-      console.log(`🎯 목표가 조건 충족! ${alert.name} price=${price} target=${alert.target}`);
-      sendTelegram(`🎯 [${alert.name}] 목표가 도달! 현재가 ${price.toLocaleString()}원 (목표가 ${alert.target.toLocaleString()}원)`);
+      sendTelegram(`⚠️ [${alert.name}] 지지선 이탈! 현재가 ${price.toLocaleString()}원 (지지선 ${alert.supportPrice.toLocaleString()}원)`);
     }
   }
 }
-
 function getAllWatchCodes() {
   const all = new Set([
     ...watchlistGroups.holding,
@@ -111,41 +144,66 @@ async function getToken() {
     appkey: cfg.appkey,
     secretkey: cfg.secretkey
   }, { headers: { 'Content-Type': 'application/json;charset=UTF-8' } });
-  return res.data.token;
+  const token = res.data.token || res.data.access_token;
+  console.log(`🔑 액세스토큰 응답 키: [${Object.keys(res.data).join(', ')}], 길이: ${token ? token.length : 0}`);
+  if (!token) throw new Error(`토큰 필드 없음. 응답: ${JSON.stringify(res.data).slice(0, 200)}`);
+  return token;
 }
 
-function connectKiwoomWS(token) {
+async function getApprovalKey() {
+  const res = await axios.post(`${BASE_URL}/oauth2/Approval`, {
+    grant_type: 'client_credentials',
+    appkey: cfg.appkey,
+    secretkey: cfg.secretkey
+  }, { headers: { 'Content-Type': 'application/json;charset=UTF-8' } });
+  const key = res.data.approval_key;
+  console.log(`🔑 WebSocket 접속허용키 응답 키: [${Object.keys(res.data).join(', ')}], 길이: ${key ? key.length : 0}`);
+  if (!key) throw new Error(`approval_key 없음. 응답: ${JSON.stringify(res.data).slice(0, 200)}`);
+  return key;
+}
+
+function connectKiwoomWS(approvalKey) {
   const myGen = ++wsGeneration;
   if (kiwoomWs) { try { kiwoomWs.terminate(); } catch(e) {} }
-  currentToken = token;
+  wsApprovalKey = approvalKey;
   kiwoomWs = new WebSocket('wss://api.kiwoom.com:10000/api/dostk/websocket');
 
   kiwoomWs.on('open', () => {
-    console.log('✅ 키움 WS 연결');
-    kiwoomWs.send(JSON.stringify({ trnm: 'LOGIN', token: token }));
+    console.log(`✅ 키움 WS 연결, 접속허용키: ${approvalKey ? approvalKey.slice(0,20)+'...' : '없음(null)'}`);
+    kiwoomWs.send(JSON.stringify({ trnm: 'LOGIN', token: approvalKey }));
   });
 
   kiwoomWs.on('message', (data) => {
     try {
       const raw = data.toString();
-      console.log('📥 RAW:', raw.slice(0, 300));
       const msg = JSON.parse(raw);
 
       if (msg.trnm === 'PING') {
-        kiwoomWs.send(JSON.stringify({ trnm: 'PING' }));
+        kiwoomWs.send(JSON.stringify({ trnm: 'PONG' }));
         return;
       }
 
-      if (msg.trnm === 'LOGIN' && msg.return_code === 0) {
-        console.log('✅ 로그인 성공');
-        kiwoomWs.send(JSON.stringify({
-          trnm: 'REG',
-          grp_no: '1',
-          refresh: '1',
-          data: [{ item: ['0001', '1001'], type: ['0U', '0U'] }]
-        }));
-        console.log('📡 KOSPI/KOSDAQ 실시간 등록 요청');
-        setTimeout(() => subscribeAllCodes(), 500);
+      if (msg.trnm === 'LOGIN') {
+        if (msg.return_code === 0) {
+          console.log('✅ 로그인 성공');
+          _wsLoginTime = Date.now();
+          kiwoomWs.send(JSON.stringify({
+            trnm: 'REG',
+            grp_no: '1',
+            refresh: '1',
+            data: [{ item: ['0001', '1001'], type: ['0U', '0U'] }]
+          }));
+          console.log('📡 KOSPI/KOSDAQ 실시간 등록 요청');
+          setTimeout(() => subscribeAllCodes(), 500);
+        } else {
+          console.log(`❌ 로그인 실패 (${msg.return_code}): ${msg.return_msg}`);
+          if (msg.return_code === 805004) {
+            console.log('🔄 토큰 무효화 감지 → 30초 후 토큰 재발급 및 재연결');
+            wsGeneration++; // 현재 close 핸들러의 재연결 방지
+            setTimeout(renewToken, 30000);
+          }
+          return;
+        }
       }
 
       if (msg.trnm === 'REG') {
@@ -199,7 +257,7 @@ function connectKiwoomWS(token) {
   kiwoomWs.on('close', () => {
     if (myGen !== wsGeneration) return; // 갱신으로 인한 종료 → 재연결 생략
     console.log('🔌 WS 종료, 10초 후 재연결...');
-    setTimeout(() => { if (myGen === wsGeneration) connectKiwoomWS(currentToken); }, 10000);
+    setTimeout(() => { if (myGen === wsGeneration) connectKiwoomWS(wsApprovalKey); }, 10000);
   });
 }
 
@@ -207,8 +265,10 @@ async function renewToken() {
   console.log('🔄 토큰 자동 갱신 시작...');
   try {
     const token = await getToken();
-    console.log('✅ 토큰 갱신 성공, WebSocket 재연결');
-    connectKiwoomWS(token);
+    currentToken = token;
+    const approvalKey = await getApprovalKey();
+    console.log('✅ 토큰/접속허용키 갱신 성공, WebSocket 재연결');
+    connectKiwoomWS(approvalKey);
   } catch(e) {
     console.log('❌ 토큰 갱신 실패:', e.message, '→ 1시간 후 재시도');
     setTimeout(renewToken, 60 * 60 * 1000);
@@ -229,15 +289,23 @@ app.get('/sse', (req, res) => {
   });
   if (currentToken && (!kiwoomWs || kiwoomWs.readyState !== WebSocket.OPEN)) {
     console.log('🔄 SSE 접속 감지 → WebSocket 재연결');
-    connectKiwoomWS(currentToken);
+    connectKiwoomWS(wsApprovalKey || currentToken);
   }
 });
 
-app.post('/ws/start', (req, res) => {
-  const token = req.body.token || currentToken;
-  if (!token) return res.status(400).json({ error: 'token 필요' });
-  connectKiwoomWS(token);
-  res.json({ status: 'ok' });
+app.post('/ws/start', async (req, res) => {
+  try {
+    if (!wsApprovalKey) {
+      const [token, approvalKey] = await Promise.all([getToken(), getApprovalKey()]);
+      currentToken = token;
+      connectKiwoomWS(approvalKey);
+    } else {
+      connectKiwoomWS(wsApprovalKey);
+    }
+    res.json({ status: 'ok' });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/ws/register', (req, res) => {
@@ -331,9 +399,9 @@ app.post('/api/dostk/:path', async (req, res) => {
 });
 
 app.post('/api/alerts', (req, res) => {
-  const { code, name, stopLoss, target } = req.body;
+  const { code, name, stopLoss, target, supportPrice, horizPrice } = req.body;
   if (!code || !name) return res.status(400).json({ error: 'code, name 필수' });
-  alerts[code] = { name, stopLoss: stopLoss || null, target: target || null };
+  alerts[code] = { name, stopLoss: stopLoss || null, target: target || null, supportPrice: supportPrice || null, horizPrice: horizPrice || null };
   delete alertCooldown[`${code}_stop`];
   delete alertCooldown[`${code}_target`];
   saveAlerts();
@@ -363,9 +431,11 @@ let marketCapSnapshot = (() => {
 })();
 const _mcAlertsToday = { kospi: new Set(), kosdaq: new Set() };
 // 서버 재시작 시 오늘 이미 보낸 알림 복원
+// alertsSentDate: 알림을 보낸 날짜 (snapshot.date와 독립적으로 저장)
 {
   const _today = new Date().toISOString().split('T')[0];
-  if (marketCapSnapshot.date === _today && marketCapSnapshot.alertsSentToday) {
+  const _alertDate = marketCapSnapshot.alertsSentDate || marketCapSnapshot.date;
+  if (_alertDate === _today && marketCapSnapshot.alertsSentToday) {
     (marketCapSnapshot.alertsSentToday.kospi  || []).forEach(cd => _mcAlertsToday.kospi.add(cd));
     (marketCapSnapshot.alertsSentToday.kosdaq || []).forEach(cd => _mcAlertsToday.kosdaq.add(cd));
     console.log(`♻️  오늘 발송된 시총알림 복원: 코스피 ${_mcAlertsToday.kospi.size}건, 코스닥 ${_mcAlertsToday.kosdaq.size}건`);
@@ -381,6 +451,7 @@ function saveAlertsToday() {
     kospi:  [..._mcAlertsToday.kospi],
     kosdaq: [..._mcAlertsToday.kosdaq]
   };
+  marketCapSnapshot.alertsSentDate = new Date().toISOString().split('T')[0];
   saveMarketCapSnapshot(marketCapSnapshot);
 }
 
@@ -517,7 +588,7 @@ async function sendTop10ChangeAlert(prevList, currList) {
       hasChange = true;
     } else {
       const pr = prevRankMap.get(s.stk_cd);
-      const diff = pr - cr;  // 양수 = 순위 상승
+      const diff = pr - cr;
       if (diff === 0) {
         lines.push(`${cr}위 ${s.stk_nm} → 변동없음`);
       } else if (diff > 0) {
@@ -547,7 +618,6 @@ async function _mcSaveSnapshotIfClose() {
   if (h === 15 && m >= 35 && m <= 45 && marketCapCache.kospi.length > 0) {
     const today = new Date().toISOString().split('T')[0];
     if (!marketCapSnapshot.date || marketCapSnapshot.date !== today) {
-      // 전일 스냅샷이 있을 때만 TOP10 변동 알림
       if (marketCapSnapshot.kospi && marketCapSnapshot.kospi.length > 0) {
         await sendTop10ChangeAlert(
           marketCapSnapshot.kospi,
@@ -603,6 +673,7 @@ async function fetchDailyCandles(code) {
       'authorization': `Bearer ${currentToken}`,
       'api-id': 'ka10081'
     },
+    httpsAgent: ipv4Agent,
     timeout: 10000
   });
   return r.data.stk_dt_pole_chart_qry || [];
@@ -750,12 +821,20 @@ app.listen(3000, async () => {
   console.log('✅ 프록시 서버 실행중 : 포트 3000');
   try {
     const token = await getToken();
-    console.log('✅ 토큰 발급 성공');
-    connectKiwoomWS(token);
+    currentToken = token;
+    console.log('✅ 액세스토큰 발급 성공');
+    let wsKey = token;
+    try {
+      wsKey = await getApprovalKey();
+      console.log('✅ WebSocket 접속허용키 발급 성공');
+    } catch(wsErr) {
+      console.log('⚠️ WebSocket 접속허용키 발급 실패, 액세스토큰으로 폴백:', wsErr.message);
+    }
+    connectKiwoomWS(wsKey);
     // 23시간마다 토큰 자동 갱신 + WebSocket 재연결
     setInterval(renewToken, 23 * 60 * 60 * 1000);
     console.log('⏰ 토큰 자동 갱신 예약 (23시간 간격)');
   } catch(e) {
-    console.log('❌ 토큰 발급 실패:', e.message);
+    console.log('❌ 액세스토큰 발급 실패:', e.message);
   }
 });
