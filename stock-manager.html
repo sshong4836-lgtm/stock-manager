@@ -3969,45 +3969,25 @@ function renderWatchlist() {
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(240,136,62,.2);color:var(--orange);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 근접">⚠️ 저항선 근접</span>`;
     }
 
-    const groupBadgeCss = { watch1:'color:var(--blue)', watch2:'color:var(--purple)', ready:'color:var(--yellow)', holding:'color:var(--red)' };
-    const groupBadgeTxt = { watch1:'🔵 관찰1', watch2:'🟣 관찰2', ready:'🟡 매수대기', holding:'🔴 보유종목' };
-    const groupBadge = `<span style="font-size:9px;${groupBadgeCss[wGrp]||''}">${groupBadgeTxt[wGrp]||''}</span>`;
-
     const idx = watchlist.findIndex(x => x.id === w.id);
     const isFirst = idx === 0;
     const isLast  = idx === watchlist.length - 1;
 
-    // ── 보유종목: 배지 없이 기존 레이아웃 ──
+    // ── 보유종목: 관찰카드 동일 레이아웃 ──
     if (wGrp === 'holding') {
-      const ACCT_COLORS = { 삼성:'var(--orange)', 키움:'var(--blue)', NH:'var(--green)' };
       const acctData = WATCH_ACCTS
         .map(a => ({ a, h: holdingsPerAcct[a][w.stock] }))
         .filter(x => x.h && x.h.qty > 0.0001);
       const journalQty  = acctData.reduce((s, x) => s + x.h.qty, 0);
       const journalCost = acctData.reduce((s, x) => s + x.h.qty * x.h.avg, 0);
       const autoAvg  = journalQty > 0 ? journalCost / journalQty : 0;
-      const pmQty = w._pm?.qty || 0;
-      const pmAvg = w._pm?.avg || 0;
-      const buyPrice = autoAvg || pmAvg || 0;
-      const totalQty = journalQty || pmQty || 0;
-      const pmAccts  = (!acctData.length && w._pm?.accounts?.length) ? w._pm.accounts : [];
-      const acctTagsHtml = acctData.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">${acctData.map(x =>
-            `<span style="background:rgba(240,136,62,.12);color:${ACCT_COLORS[x.a]||'var(--orange)'};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">${x.a}(${fmt(x.h.qty)}주)</span>`
-          ).join('')}</div>`
-        : pmAccts.length
-        ? `<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:2px">${pmAccts.map(a =>
-            `<span style="background:rgba(240,136,62,.12);color:${ACCT_COLORS[a.name]||'var(--orange)'};border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">${a.name}(${fmt(a.qty)}주)</span>`
-          ).join('')}</div>`
-        : '';
-      const metaStr = [buyPrice?`평균 ${fmtPrice(buyPrice,w.ticker)}`:'', totalQty?`총 ${fmt(totalQty)}주`:''].filter(Boolean).join(' · ');
-      const pnlHtml = (buyPrice && w.price && totalQty)
+      const buyPrice = autoAvg || w._pm?.avg || 0;
+      const pnlHtml = (buyPrice && w.price)
         ? (() => {
-            const pct    = (w.price - buyPrice) / buyPrice * 100;
-            const amount = (w.price - buyPrice) * totalQty;
-            const color  = pct >= 0 ? 'var(--green)' : 'var(--red)';
-            const sign   = pct >= 0 ? '+' : '';
-            return `<span style="font-size:12px;font-weight:700;color:${color}">${sign}${fmtF(pct,2)}% <span style="font-weight:400;font-size:11px">(${sign}${fmt(Math.round(amount))}원)</span></span>`;
+            const pct   = (w.price - buyPrice) / buyPrice * 100;
+            const sign  = pct >= 0 ? '+' : '';
+            const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+            return `<span style="color:${color};font-weight:700">${sign}${fmtF(pct,2)}%</span>`;
           })()
         : '';
       return `<div class="wc-row" data-id="${w.id}" draggable="true">
@@ -4019,17 +3999,23 @@ function renderWatchlist() {
           <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
           <div class="wc-info">
             <span class="wc-name" title="${ea(w.stock)}">${eh(w.stock)}</span>
-            <span class="wc-tkr">${eh(dispTicker(w.ticker)||'—')}</span>
-            ${groupBadge}
+            <span class="wc-tkr">${pnlHtml}</span>
           </div>
-          <div class="wc-prices">
-            <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
-            ${acctTagsHtml}${metaStr?`<span class="wc-tgt">${metaStr}</span>`:''}${pnlHtml}
-          </div>
-          ${trendBadge}
-          <div class="wc-actions no-print">
-            <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
-            <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
+          <div class="wc-price-row">
+            <div class="wc-price-cell">
+              <span class="wc-cur-label">현재가</span>
+              <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
+            </div>
+            <div class="wc-price-badges">
+              <span class="wc-badge ${w.supportPrice ? 'wc-badge-blue'  : 'wc-badge-empty'}" data-field="supportPrice" onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정"><span class="wc-bl">지지</span><span class="wc-bv">${w.supportPrice ? fmt(Math.round(w.supportPrice)) : '—'}</span></span>
+              <span class="wc-badge ${w.stopPrice    ? 'wc-badge-red'   : 'wc-badge-empty'}" data-field="stopPrice"    onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정"><span class="wc-bl">손절</span><span class="wc-bv">${w.stopPrice    ? fmt(Math.round(w.stopPrice))    : '—'}</span></span>
+              <span class="wc-badge ${w.target       ? 'wc-badge-green' : 'wc-badge-empty'}" data-field="target"       onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정"><span class="wc-bl">목표</span><span class="wc-bv">${w.target       ? fmt(Math.round(w.target))       : '—'}</span></span>
+            </div>
+            <div class="wc-actions no-print" style="margin-left:auto">
+              ${trendBadge}
+              <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
+              <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
+            </div>
           </div>
         </div>
         ${detailHtml}
