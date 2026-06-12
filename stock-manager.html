@@ -3999,7 +3999,7 @@ function renderWatchlist() {
           <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
           <div class="wc-info">
             <span class="wc-name" title="${ea(w.stock)}">${eh(w.stock)}</span>
-            <span class="wc-tkr">${pnlHtml}</span>
+            <span class="wc-tkr" data-buy-price="${buyPrice}">${pnlHtml}</span>
           </div>
           <div class="wc-price-row">
             <div class="wc-price-cell">
@@ -6041,6 +6041,16 @@ window.applyPriceUpdate = function(itemCode, price, change) {
     if (el) {
       el.textContent = fmtPrice(price, w.ticker);
       el.style.color = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--blue)';
+    }
+    const tkrEl = el && el.closest('.wc-main')?.querySelector('.wc-tkr[data-buy-price]');
+    if (tkrEl) {
+      const buyPrice = parseFloat(tkrEl.dataset.buyPrice) || 0;
+      if (buyPrice > 0) {
+        const pct  = (price - buyPrice) / buyPrice * 100;
+        const sign = pct >= 0 ? '+' : '';
+        const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+        tkrEl.innerHTML = `<span style="color:${color};font-weight:700">${sign}${fmtF(pct,2)}%</span>`;
+      }
     }
   });
 };
