@@ -4070,8 +4070,8 @@ function renderWatchlist() {
           ${w.supportPrice ? `<span class="wc-badge wc-badge-blue"  onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정">지지 ${fmt(Math.round(w.supportPrice))}</span>` : ''}
           ${w.stopPrice    ? `<span class="wc-badge wc-badge-red"   onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정">손절 ${fmt(Math.round(w.stopPrice))}</span>`    : ''}
           ${w.target       ? `<span class="wc-badge wc-badge-green" onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정">목표 ${fmt(Math.round(w.target))}</span>`       : ''}
-          ${trendBadge}
           <div class="wc-actions no-print" style="margin-left:auto">
+            ${trendBadge}
             ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
             ${wGrp==='ready' ? `
               <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
@@ -4282,7 +4282,7 @@ function updateTrendlineDisplay(id) {
       badge.style.cssText = badgeStyle + ';font-size:10px;padding:2px 6px;flex-shrink:0';
       badge.textContent = badgeText;
       const actions = main.querySelector('.wc-actions');
-      if (actions) main.insertBefore(badge, actions); else main.appendChild(badge);
+      if (actions) actions.insertBefore(badge, actions.firstChild); else main.appendChild(badge);
     }
   }
 }
@@ -5376,7 +5376,7 @@ function updateEtfTrendlineDisplay(id) {
       badge.style.cssText = badgeStyle + ';font-size:10px;padding:2px 6px;flex-shrink:0';
       badge.textContent = badgeText;
       const actions = main.querySelector('.wc-actions');
-      if (actions) main.insertBefore(badge, actions); else main.appendChild(badge);
+      if (actions) actions.insertBefore(badge, actions.firstChild); else main.appendChild(badge);
     }
   }
 }
