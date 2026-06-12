@@ -4059,27 +4059,28 @@ function renderWatchlist() {
           <button class="wc-order-btn" onclick="moveWatch(${w.id},-1)" ${isFirst?'disabled':''} title="위로">▲</button>
           <button class="wc-order-btn" onclick="moveWatch(${w.id},1)"  ${isLast ?'disabled':''} title="아래로">▼</button>
         </div>
-        <div class="wc-price-row">
-          <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
+        <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
+        <div class="wc-info">
           <span class="wc-name" title="${ea(w.stock)}">${eh(w.stock)}</span>
           <span class="wc-tkr">${eh(dispTicker(w.ticker)||'—')}</span>
-          ${groupBadge}
+        </div>
+        <div class="wc-price-row">
+          <span style="font-size:10px;color:var(--muted);white-space:nowrap">현재가</span>
           <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
-          ${w.target       ? `<span class="wc-badge wc-badge-green" onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정">목표 ${fmt(Math.round(w.target))}</span>`       : ''}
           ${w.supportPrice ? `<span class="wc-badge wc-badge-blue"  onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정">지지 ${fmt(Math.round(w.supportPrice))}</span>` : ''}
           ${w.stopPrice    ? `<span class="wc-badge wc-badge-red"   onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정">손절 ${fmt(Math.round(w.stopPrice))}</span>`    : ''}
+          ${w.target       ? `<span class="wc-badge wc-badge-green" onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정">목표 ${fmt(Math.round(w.target))}</span>`       : ''}
           ${trendBadge}
-          ${readyExtra}
-        </div>
-        <div class="wc-actions no-print">
-          ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
-          ${wGrp==='ready' ? `
-            <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
-            <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch2')" title="관찰2로 되돌리기" style="color:var(--purple);white-space:nowrap;font-size:11px">← 관찰2</button>
-            <button class="btn btn-ghost btn-sm" onclick="confirmMoveToHolding(${w.id})" title="보유종목으로 이동" style="color:var(--green);font-weight:600;white-space:nowrap;font-size:11px">매수확정</button>
-          ` : ''}
-          <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
-          <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
+          <div class="wc-actions no-print" style="margin-left:auto">
+            ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
+            ${wGrp==='ready' ? `
+              <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
+              <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch2')" title="관찰2로 되돌리기" style="color:var(--purple);white-space:nowrap;font-size:11px">← 관찰2</button>
+              <button class="btn btn-ghost btn-sm" onclick="confirmMoveToHolding(${w.id})" title="보유종목으로 이동" style="color:var(--green);font-weight:600;white-space:nowrap;font-size:11px">매수확정</button>
+            ` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
+            <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
+          </div>
         </div>
       </div>
       ${detailHtml}
