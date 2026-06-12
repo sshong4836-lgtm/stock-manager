@@ -163,7 +163,8 @@
     .wc-name   { font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .wc-tkr    { font-size:10px; color:var(--muted); }
     /* 가격 */
-    .wc-prices { display:flex; flex-direction:column; gap:1px; flex:1; min-width:0; }
+    .wc-prices { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+    .wc-price-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
     .wc-cur    { font-size:13px; font-weight:700; color:var(--blue); white-space:nowrap; }
     .wc-tgt    { font-size:11px; color:var(--muted); white-space:nowrap; }
     /* 액션버튼 */
@@ -180,14 +181,11 @@
     @media(max-width:600px) { .wc-info { max-width:80px; } .wc-actions .wc-label-btn { display:none; } }
     .wc-order-btns { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
     /* 가격 배지 */
-    .wc-badge-row { display:flex; flex-wrap:wrap; gap:3px; margin-top:3px; }
     .wc-badge { display:inline-flex; align-items:center; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; }
     .wc-badge:hover { opacity:.75; }
     .wc-badge-green  { background:rgba(63,185,80,.15); color:var(--green); border-color:rgba(63,185,80,.3); }
     .wc-badge-blue   { background:rgba(88,166,255,.15); color:var(--blue);  border-color:rgba(88,166,255,.3); }
     .wc-badge-red    { background:rgba(248,81,73,.15);  color:var(--red);   border-color:rgba(248,81,73,.3); }
-    .wc-badge-ghost  { background:transparent; color:var(--muted); border:1px dashed var(--border); opacity:.5; }
-    .wc-badge-ghost:hover { opacity:1; }
     .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; width:70px; padding:0; }
     .wc-order-btn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-size:9px; padding:1px 5px; cursor:pointer; line-height:1.3; transition:color .15s, border-color .15s; font-family:inherit; }
     .wc-order-btn:hover:not(:disabled) { color:var(--blue); border-color:var(--blue); }
@@ -3985,17 +3983,14 @@ function renderWatchlist() {
           ${groupBadge}
         </div>
         <div class="wc-prices">
-          <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
-          ${(() => {
-            const mkBadge = (field, cls, label, val) => val
-              ? `<span class="wc-badge ${cls}" onclick="startWatchBadgeEdit(event,${w.id},'${field}')" title="${label} 클릭하여 수정">${label} ${fmt(Math.round(val))}</span>`
-              : `<span class="wc-badge wc-badge-ghost" onclick="startWatchBadgeEdit(event,${w.id},'${field}')" title="${label} 추가">+${label}</span>`;
-            return `<div class="wc-badge-row">${[
-              mkBadge('target',       'wc-badge-green', '목표', w.target),
-              mkBadge('supportPrice', 'wc-badge-blue',  '지지', w.supportPrice),
-              mkBadge('stopPrice',    'wc-badge-red',   '손절', w.stopPrice),
-            ].join('')}</div>`;
-          })()}
+          <div class="wc-price-row">
+            <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
+            ${[
+              w.target       ? `<span class="wc-badge wc-badge-green" onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정">목표 ${fmt(Math.round(w.target))}</span>`            : '',
+              w.supportPrice ? `<span class="wc-badge wc-badge-blue"  onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정">지지 ${fmt(Math.round(w.supportPrice))}</span>` : '',
+              w.stopPrice    ? `<span class="wc-badge wc-badge-red"   onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정">손절 ${fmt(Math.round(w.stopPrice))}</span>`       : '',
+            ].filter(Boolean).join('')}
+          </div>
           ${wGrp === 'ready' ? (() => {
             const ACCT_COLORS = { '삼성':'var(--orange)', '키움':'var(--blue)', 'NH':'var(--green)' };
             const ACCT_ICONS  = { '삼성':'🏦', '키움':'💙', 'NH':'🟢' };
@@ -4327,23 +4322,20 @@ function startWatchBadgeEdit(e, id, field) {
   if (!w) return;
   const cur = w[field] || 0;
   const meta = _BADGE_META[field];
-  const wasGhost = !cur;
   badge.innerHTML = `${meta.label} <input type="number" value="${cur||''}" placeholder="0" onclick="event.stopPropagation()">`;
   const inp = badge.querySelector('input');
   inp.focus(); inp.select();
   const restore = () => {
-    badge.className = wasGhost ? 'wc-badge wc-badge-ghost' : `wc-badge ${meta.cls}`;
-    badge.innerHTML = wasGhost ? `+${meta.label}` : `${meta.label} ${fmt(Math.round(cur))}`;
+    badge.innerHTML = `${meta.label} ${fmt(Math.round(cur))}`;
   };
   const commit = () => {
     const val = parseFloat(inp.value) || 0;
     w[field] = val;
     save('watchlist', watchlist);
     if (val) {
-      badge.className = `wc-badge ${meta.cls}`;
       badge.innerHTML = `${meta.label} ${fmt(Math.round(val))}`;
     } else {
-      restore();
+      badge.remove();
     }
   };
   inp.addEventListener('keydown', ev => {
