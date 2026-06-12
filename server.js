@@ -3,6 +3,14 @@ const cors = require('cors');
 const axios = require('axios');
 const WebSocket = require('ws');
 const fs = require('fs');
+
+process.on('uncaughtException', (err) => {
+  console.log('❌ 미처리 예외 (uncaughtException):', err.message, '\n', err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.log('❌ 미처리 Promise 거부 (unhandledRejection):', reason?.message || reason);
+});
+
 const app = express();
 app.use(cors({
   origin: '*',
@@ -472,7 +480,11 @@ function loadMcAlertState() {
 }
 
 function saveMarketCapSnapshot(data) {
-  fs.writeFileSync(MARKET_CAP_FILE, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(MARKET_CAP_FILE, JSON.stringify(data, null, 2));
+  } catch(e) {
+    console.log('❌ marketcap_snapshot.json 저장 실패:', e.message);
+  }
 }
 
 function saveAlertsToday() {
@@ -645,6 +657,7 @@ async function sendTop10ChangeAlert(prevList, currList) {
 
 // 장마감(15:35~15:45) 시 TOP10 변동 알림 + 전일 스냅샷 저장
 async function _mcSaveSnapshotIfClose() {
+  try {
   const h = new Date().getHours(), m = new Date().getMinutes();
   if (h === 15 && m >= 35 && m <= 45 && marketCapCache.kospi.length > 0) {
     const today = new Date().toISOString().split('T')[0];
@@ -668,6 +681,9 @@ async function _mcSaveSnapshotIfClose() {
       console.log(`📸 시총순위 전일 스냅샷 저장 (${today})`);
     }
   }
+  } catch(e) {
+    console.log('❌ _mcSaveSnapshotIfClose 오류:', e.message);
+  }
 }
 
 app.get('/api/market-cap', async (req, res) => {
@@ -686,7 +702,7 @@ setInterval(() => {
   const h = new Date().getHours(), m = new Date().getMinutes();
   const isMarket = (h === 9 && m >= 5) || (h > 9 && h < 15) || (h === 15 && m < 35);
   if (isMarket) refreshMarketCap();
-  _mcSaveSnapshotIfClose();
+  _mcSaveSnapshotIfClose().catch(e => console.log('❌ 스냅샷 오류:', e.message));
 }, 5 * 60 * 1000);
 
 // ===== watch2 그룹 알림 시스템 =====
