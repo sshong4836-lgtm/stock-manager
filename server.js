@@ -439,6 +439,7 @@ let marketCapSnapshot = (() => {
   catch(e) { return { date: null, kospi: [], kosdaq: [] }; }
 })();
 const _mcAlertsToday = { kospi: new Set(), kosdaq: new Set() };
+let _mcAlertsDate = new Date().toISOString().split('T')[0]; // _mcAlertsToday가 속한 날짜
 
 function saveMcAlertState() {
   const state = {
@@ -567,8 +568,10 @@ async function refreshMarketCap() {
     ]);
     if (!kospiList.length && !kosdaqList.length) return;
 
-    // 날짜 바뀌면 일중 중복알림 set + 파일 초기화
-    if (marketCapSnapshot.date && marketCapSnapshot.date !== today) {
+    // 자정 넘어 날짜 바뀌면 일중 중복알림 set 초기화
+    // (marketCapSnapshot.date는 어제 스냅샷 날짜라 항상 ≠ today → 잘못된 비교)
+    if (_mcAlertsDate !== today) {
+      _mcAlertsDate = today;
       _mcAlertsToday.kospi.clear();
       _mcAlertsToday.kosdaq.clear();
       marketCapSnapshot.alertsSentToday = { kospi: [], kosdaq: [] };
