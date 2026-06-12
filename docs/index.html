@@ -181,12 +181,14 @@
     @media(max-width:600px) { .wc-info { max-width:80px; } .wc-actions .wc-label-btn { display:none; } }
     .wc-order-btns { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
     /* 가격 배지 */
-    .wc-badge { display:inline-flex; align-items:center; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; }
+    .wc-badge { display:inline-flex; align-items:center; justify-content:center; min-width:76px; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; flex-shrink:0; }
     .wc-badge:hover { opacity:.75; }
     .wc-badge-green  { background:rgba(63,185,80,.15); color:var(--green); border-color:rgba(63,185,80,.3); }
     .wc-badge-blue   { background:rgba(88,166,255,.15); color:var(--blue);  border-color:rgba(88,166,255,.3); }
     .wc-badge-red    { background:rgba(248,81,73,.15);  color:var(--red);   border-color:rgba(248,81,73,.3); }
-    .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; width:70px; padding:0; }
+    .wc-badge-empty  { color:rgba(150,150,150,.4); border-color:rgba(255,255,255,.1); border-style:dashed; }
+    .wc-badge-empty:hover { opacity:1; border-color:rgba(255,255,255,.3); color:var(--muted); }
+    .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; width:58px; padding:0; text-align:center; }
     .wc-order-btn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-size:9px; padding:1px 5px; cursor:pointer; line-height:1.3; transition:color .15s, border-color .15s; font-family:inherit; }
     .wc-order-btn:hover:not(:disabled) { color:var(--blue); border-color:var(--blue); }
     .wc-order-btn:disabled { opacity:0.2; cursor:not-allowed; }
@@ -4067,9 +4069,9 @@ function renderWatchlist() {
         <div class="wc-price-row">
           <span style="font-size:10px;color:var(--muted);white-space:nowrap">현재가</span>
           <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
-          ${w.supportPrice ? `<span class="wc-badge wc-badge-blue"  onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정">지지 ${fmt(Math.round(w.supportPrice))}</span>` : ''}
-          ${w.stopPrice    ? `<span class="wc-badge wc-badge-red"   onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정">손절 ${fmt(Math.round(w.stopPrice))}</span>`    : ''}
-          ${w.target       ? `<span class="wc-badge wc-badge-green" onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정">목표 ${fmt(Math.round(w.target))}</span>`       : ''}
+          <span class="wc-badge ${w.supportPrice ? 'wc-badge-blue'  : 'wc-badge-empty'}" data-field="supportPrice" onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정">${w.supportPrice ? `지지 ${fmt(Math.round(w.supportPrice))}` : '지지 —'}</span>
+          <span class="wc-badge ${w.stopPrice    ? 'wc-badge-red'   : 'wc-badge-empty'}" data-field="stopPrice"    onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정">${w.stopPrice    ? `손절 ${fmt(Math.round(w.stopPrice))}`    : '손절 —'}</span>
+          <span class="wc-badge ${w.target       ? 'wc-badge-green' : 'wc-badge-empty'}" data-field="target"       onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정">${w.target       ? `목표 ${fmt(Math.round(w.target))}`       : '목표 —'}</span>
           <div class="wc-actions no-print" style="margin-left:auto">
             ${trendBadge}
             ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
@@ -4310,18 +4312,16 @@ function updateWatchBadgesInPlace(id) {
   if (!container) return;
   Object.entries(_BADGE_META).forEach(([field, meta]) => {
     const val = w[field] || 0;
-    const el  = container.querySelector('.' + meta.cls);
-    if (val && el) {
-      el.innerHTML = `${meta.label} ${fmt(Math.round(val))}`;
-    } else if (val && !el) {
-      const span = document.createElement('span');
-      span.className = `wc-badge ${meta.cls}`;
-      span.title = `${meta.label} 클릭하여 수정`;
-      span.onclick = ev => startWatchBadgeEdit(ev, id, field);
-      span.textContent = `${meta.label} ${fmt(Math.round(val))}`;
-      container.appendChild(span);
-    } else if (!val && el) {
-      el.remove();
+    const el = container.querySelector(`[data-field="${field}"]`);
+    if (!el) return;
+    if (val) {
+      el.classList.remove('wc-badge-empty');
+      el.classList.add(meta.cls);
+      el.textContent = `${meta.label} ${fmt(Math.round(val))}`;
+    } else {
+      el.classList.remove(meta.cls);
+      el.classList.add('wc-badge-empty');
+      el.textContent = `${meta.label} —`;
     }
   });
 }
@@ -4354,25 +4354,39 @@ function startWatchBadgeEdit(e, id, field) {
   if (!w) return;
   const cur = w[field] || 0;
   const meta = _BADGE_META[field];
+
+  const applyVal = (val) => {
+    if (val) {
+      badge.classList.remove('wc-badge-empty');
+      badge.classList.add(meta.cls);
+      badge.textContent = `${meta.label} ${fmt(Math.round(val))}`;
+    } else {
+      badge.classList.remove(meta.cls);
+      badge.classList.add('wc-badge-empty');
+      badge.textContent = `${meta.label} —`;
+    }
+  };
+
   badge.innerHTML = `${meta.label} <input type="number" value="${cur||''}" placeholder="0" onclick="event.stopPropagation()">`;
   const inp = badge.querySelector('input');
   inp.focus(); inp.select();
-  const restore = () => {
-    badge.innerHTML = `${meta.label} ${fmt(Math.round(cur))}`;
-  };
+
+  let done = false;
   const commit = () => {
+    if (done) return; done = true;
     const val = parseFloat(inp.value) || 0;
     w[field] = val;
     save('watchlist', watchlist);
-    if (val) {
-      badge.innerHTML = `${meta.label} ${fmt(Math.round(val))}`;
-    } else {
-      badge.remove();
-    }
+    applyVal(val);
   };
+  const restore = () => {
+    if (done) return; done = true;
+    applyVal(cur);
+  };
+
   inp.addEventListener('keydown', ev => {
     if (ev.key === 'Enter')  { ev.preventDefault(); commit(); }
-    if (ev.key === 'Escape') { restore(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); restore(); }
   });
   inp.addEventListener('blur', commit);
 }
