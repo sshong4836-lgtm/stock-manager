@@ -179,6 +179,14 @@
     .wc-legend-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
     @media(max-width:600px) { .wc-info { max-width:80px; } .wc-actions .wc-label-btn { display:none; } }
     .wc-order-btns { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
+    /* 가격 배지 */
+    .wc-badge-row { display:flex; flex-wrap:wrap; gap:3px; margin-top:3px; }
+    .wc-badge { display:inline-flex; align-items:center; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; }
+    .wc-badge:hover { opacity:.75; }
+    .wc-badge-green  { background:rgba(63,185,80,.15); color:var(--green); border-color:rgba(63,185,80,.3); }
+    .wc-badge-blue   { background:rgba(88,166,255,.15); color:var(--blue);  border-color:rgba(88,166,255,.3); }
+    .wc-badge-red    { background:rgba(248,81,73,.15);  color:var(--red);   border-color:rgba(248,81,73,.3); }
+    .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; width:70px; padding:0; }
     .wc-order-btn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-size:9px; padding:1px 5px; cursor:pointer; line-height:1.3; transition:color .15s, border-color .15s; font-family:inherit; }
     .wc-order-btn:hover:not(:disabled) { color:var(--blue); border-color:var(--blue); }
     .wc-order-btn:disabled { opacity:0.2; cursor:not-allowed; }
@@ -3976,6 +3984,14 @@ function renderWatchlist() {
         </div>
         <div class="wc-prices">
           <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
+          ${(() => {
+            const badges = [
+              w.target      ? `<span class="wc-badge wc-badge-green" onclick="startWatchBadgeEdit(event,${w.id},'target')"      title="목표가 클릭하여 수정">목표 ${fmt(Math.round(w.target))}</span>`      : '',
+              w.supportPrice? `<span class="wc-badge wc-badge-blue"  onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정">지지 ${fmt(Math.round(w.supportPrice))}</span>` : '',
+              w.stopPrice   ? `<span class="wc-badge wc-badge-red"   onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정">손절 ${fmt(Math.round(w.stopPrice))}</span>`    : '',
+            ].filter(Boolean);
+            return badges.length ? `<div class="wc-badge-row">${badges.join('')}</div>` : '';
+          })()}
           ${wGrp === 'ready' ? (() => {
             const ACCT_COLORS = { '삼성':'var(--orange)', '키움':'var(--blue)', 'NH':'var(--green)' };
             const ACCT_ICONS  = { '삼성':'🏦', '키움':'💙', 'NH':'🟢' };
@@ -4036,8 +4052,6 @@ function renderWatchlist() {
         </div>
         ${trendBadge}
         <div class="wc-actions no-print">
-          <button class="btn btn-danger btn-sm"  onclick="openWatchTradeModal(${w.id},'buy')" title="매수 기록">📗</button>
-          <button class="btn btn-primary btn-sm" onclick="openWatchTradeModal(${w.id},'sell')" title="매도 기록">📕</button>
           ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
           ${wGrp==='ready' ? `
             <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
@@ -4294,82 +4308,36 @@ function saveWatchSignal(id, sig) {
   }
 }
 
-// ── 관심종목 매수/매도 팝업 ──
-let _wTrade = { id: null, type: null };
+// ── 배지 인라인 편집 ──
+const _BADGE_META = {
+  target:       { cls: 'wc-badge-green', label: '목표' },
+  supportPrice: { cls: 'wc-badge-blue',  label: '지지' },
+  stopPrice:    { cls: 'wc-badge-red',   label: '손절' },
+};
 
-function openWatchTradeModal(watchId, type) {
-  const w = watchlist.find(x => x.id === watchId);
+function startWatchBadgeEdit(e, id, field) {
+  e.stopPropagation();
+  const badge = e.currentTarget;
+  if (badge.querySelector('input')) return;
+  const w = watchlist.find(x => x.id === id);
   if (!w) return;
-  _wTrade = { id: watchId, type };
-  const existing = document.getElementById('w-trade-modal');
-  if (existing) existing.remove();
-  const typeLabel   = type === 'buy' ? '📗 매수' : '📕 매도';
-  const borderColor = type === 'buy' ? 'var(--green)' : 'var(--red)';
-  const overlay = document.createElement('div');
-  overlay.id = 'w-trade-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center';
-  overlay.addEventListener('click', e => { if (e.target === overlay) closeWatchTradeModal(); });
-  overlay.innerHTML = `
-    <div style="background:var(--bg2);border:1px solid var(--border);border-left:4px solid ${borderColor};border-radius:12px;padding:24px 28px;min-width:300px;max-width:400px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.35)">
-      <div style="font-size:16px;font-weight:700;margin-bottom:16px">${typeLabel} — ${escHtml(w.stock)}</div>
-      <div class="form-group">
-        <label>계좌</label>
-        <select id="wt-acct" style="width:100%">
-          <option value="삼성">🏦 삼성계좌</option>
-          <option value="키움">💙 키움계좌</option>
-          <option value="NH">🟢 NH계좌</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>수량 (주)</label>
-        <input type="number" id="wt-qty" placeholder="0" min="0" style="width:100%"
-          onkeydown="if(event.key==='Enter')confirmWatchTrade()">
-      </div>
-      <div class="form-group">
-        <label>가격 (원/주)</label>
-        <input type="number" id="wt-price" placeholder="0" min="0" value="${w.price||''}" style="width:100%"
-          onkeydown="if(event.key==='Enter')confirmWatchTrade()">
-      </div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label>날짜</label>
-        <input type="date" id="wt-date" value="${today()}" style="width:100%">
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" style="flex:1" onclick="confirmWatchTrade()">확인</button>
-        <button class="btn btn-ghost"   style="flex:1" onclick="closeWatchTradeModal()">취소</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  setTimeout(() => { const el = document.getElementById('wt-qty'); if (el) el.focus(); }, 50);
-}
-
-function closeWatchTradeModal() {
-  const modal = document.getElementById('w-trade-modal');
-  if (modal) modal.remove();
-  _wTrade = { id: null, type: null };
-}
-
-function confirmWatchTrade() {
-  const w = watchlist.find(x => x.id === _wTrade.id);
-  if (!w) return closeWatchTradeModal();
-  const account = document.getElementById('wt-acct').value;
-  const qty     = parseFloat(document.getElementById('wt-qty').value)   || 0;
-  const price   = parseFloat(document.getElementById('wt-price').value) || 0;
-  const date    = document.getElementById('wt-date').value;
-  if (!qty || !price) { toast('수량과 가격을 입력하세요.', 'red'); return; }
-  if (!date)          { toast('날짜를 입력하세요.', 'red'); return; }
-  if (_wTrade.type === 'sell') {
-    const held = (calcHoldingsFromJournal(account)[w.stock] || {}).qty || 0;
-    if (qty > held) { toast(`${account} 보유 수량(${fmt(held)}주)보다 많습니다.`, 'red'); return; }
-  }
-  journals.unshift({ id: Date.now(), date, stock: w.stock, account, type: _wTrade.type, qty, price, fee: 0, memo: '' });
-  save('journals', journals);
-  renderJournal();
-  renderPortfolio();
-  updateStockDatalist();
-  renderWatchlist();
-  toast(`${w.stock} ${_wTrade.type === 'buy' ? '매수' : '매도'} 기록이 추가되었습니다.`);
-  closeWatchTradeModal();
+  const cur = w[field] || 0;
+  const meta = _BADGE_META[field];
+  badge.innerHTML = `${meta.label} <input type="number" value="${cur||''}" placeholder="0" onclick="event.stopPropagation()">`;
+  const inp = badge.querySelector('input');
+  inp.focus(); inp.select();
+  const commit = () => {
+    const val = parseFloat(inp.value) || 0;
+    w[field] = val;
+    save('watchlist', watchlist);
+    if (val) {
+      badge.innerHTML = `${meta.label} ${fmt(Math.round(val))}`;
+    } else {
+      badge.remove();
+    }
+  };
+  inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); commit(); } if (ev.key === 'Escape') { badge.innerHTML = cur ? `${meta.label} ${fmt(Math.round(cur))}` : ''; if (!cur) badge.remove(); } });
+  inp.addEventListener('blur', commit);
 }
 
 // ── 관심종목 카드 → 매매일지 탭으로 이동 + 자동 입력 ──
