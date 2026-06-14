@@ -6382,8 +6382,8 @@ function _renderNewsStockBar() {
   const bar = document.getElementById('news-stock-filter');
   if (!bar) return;
   const names = _getWatchNames();
-  bar.innerHTML = `<button class="news-stock-btn${_newsStockFilter === '' ? ' active' : ''}" onclick="setNewsStockFilter(this,'')">전체</button>`
-    + names.map(nm => `<button class="news-stock-btn${_newsStockFilter === nm ? ' active' : ''}" onclick="setNewsStockFilter(this,${JSON.stringify(nm)})">${nm}</button>`).join('');
+  bar.innerHTML = `<button class="news-stock-btn${_newsStockFilter === '' ? ' active' : ''}" onclick='setNewsStockFilter(this,"")'>전체</button>`
+    + names.map(nm => `<button class="news-stock-btn${_newsStockFilter === nm ? ' active' : ''}" onclick='setNewsStockFilter(this,${JSON.stringify(nm)})'>${nm}</button>`).join('');
 }
 
 function _renderNewsCards() {
