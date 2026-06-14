@@ -382,16 +382,23 @@
     }
 
     /* ── 종목뉴스 탭 ── */
-    .news-filter-wrap { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+    .news-filter-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
+    .news-filter-label { font-size:11px; color:var(--muted); font-weight:600; white-space:nowrap; padding-top:5px; min-width:36px; }
+    .news-filter-wrap { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
     .news-filter-btn { padding:4px 11px; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:12px; cursor:pointer; transition:all .15s; }
     .news-filter-btn.active { background:var(--blue); color:#fff; border-color:var(--blue); }
     .news-filter-btn:hover:not(.active) { border-color:var(--text); color:var(--text); }
+    .news-stock-btn { padding:4px 11px; border-radius:20px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:12px; cursor:pointer; transition:all .15s; }
+    .news-stock-btn.active { background:var(--green,#22c55e); color:#fff; border-color:var(--green,#22c55e); }
+    .news-stock-btn:hover:not(.active) { border-color:var(--text); color:var(--text); }
     .news-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-bottom:10px; }
     .news-card-hd { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
     .news-badge { font-size:11px; font-weight:700; background:rgba(59,130,246,.15); color:var(--blue); padding:2px 9px; border-radius:12px; white-space:nowrap; }
     .news-time { font-size:11px; color:var(--muted); margin-left:auto; white-space:nowrap; }
     .news-body { font-size:13px; line-height:1.65; color:var(--text); white-space:pre-wrap; word-break:break-word; max-height:200px; overflow-y:auto; }
     .news-doc { font-size:12px; color:var(--orange); margin-top:6px; }
+    .news-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+    .news-stock-tag { font-size:11px; font-weight:700; background:rgba(34,197,94,.15); color:var(--green,#22c55e); padding:2px 8px; border-radius:10px; }
 
     /* ── 매매일지 관심종목 드롭다운 ── */
     .j-watch-dd {
@@ -465,16 +472,25 @@
       <div class="card-title" style="margin:0">📰 종목뉴스</div>
       <button class="btn btn-sm" onclick="loadNewsTab()">🔄 새로고침</button>
     </div>
-    <div class="news-filter-wrap">
-      <button class="news-filter-btn active" onclick="setNewsFilter(this,'')">전체</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'joonsungkim')">joonsungkim</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'huhjae')">huhjae</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'jw_tech')">jw_tech</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'BRILLER_Research')">BRILLER_Research</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'KB_EPC_MJ')">KB_EPC_MJ</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'HI_GS')">HI_GS</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'report_figure_by_offset')">report_figure_by_offset</button>
-      <button class="news-filter-btn" onclick="setNewsFilter(this,'easobi')">easobi</button>
+    <div class="news-filter-row">
+      <span class="news-filter-label">종목</span>
+      <div class="news-filter-wrap" id="news-stock-filter">
+        <button class="news-stock-btn active" onclick="setNewsStockFilter(this,'')">전체</button>
+      </div>
+    </div>
+    <div class="news-filter-row" style="margin-bottom:16px">
+      <span class="news-filter-label">채널</span>
+      <div class="news-filter-wrap">
+        <button class="news-filter-btn active" onclick="setNewsFilter(this,'')">전체</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'joonsungkim')">joonsungkim</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'huhjae')">huhjae</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'jw_tech')">jw_tech</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'BRILLER_Research')">BRILLER_Research</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'KB_EPC_MJ')">KB_EPC_MJ</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'HI_GS')">HI_GS</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'report_figure_by_offset')">report_figure_by_offset</button>
+        <button class="news-filter-btn" onclick="setNewsFilter(this,'easobi')">easobi</button>
+      </div>
     </div>
     <div id="news-list">
       <div style="color:var(--muted);text-align:center;padding:40px">탭을 클릭하면 뉴스를 불러옵니다.</div>
@@ -6219,33 +6235,62 @@ function _mcRenderRows(items, tbodyId) {
 // 종목뉴스 탭
 // ══════════════════════════════════════════════════════
 let _newsFilter = '';
+let _newsStockFilter = '';
+let _newsAllData = [];
+
+function _getWatchNames() {
+  return [...new Set(watchlist.map(w => w.stock).filter(Boolean))];
+}
+
+function _renderNewsStockBar() {
+  const bar = document.getElementById('news-stock-filter');
+  if (!bar) return;
+  const names = _getWatchNames();
+  bar.innerHTML = `<button class="news-stock-btn${_newsStockFilter === '' ? ' active' : ''}" onclick="setNewsStockFilter(this,'')">전체</button>`
+    + names.map(nm => `<button class="news-stock-btn${_newsStockFilter === nm ? ' active' : ''}" onclick="setNewsStockFilter(this,${JSON.stringify(nm)})">${nm}</button>`).join('');
+}
+
+function _renderNewsCards() {
+  const wrap = document.getElementById('news-list');
+  if (!wrap) return;
+  const names = _getWatchNames();
+  let data = _newsAllData;
+  if (_newsStockFilter) {
+    data = data.filter(n => ((n.text || '') + ' ' + (n.original_text || '')).includes(_newsStockFilter));
+  }
+  if (!data.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">뉴스 없음</div>';
+    return;
+  }
+  wrap.innerHTML = data.map(n => {
+    const d = n.savedAt ? new Date(n.savedAt) : null;
+    const t = d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '';
+    const body = (n.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const docHtml = n.doc_name ? `<div class="news-doc">📄 ${n.doc_name}</div>` : '';
+    const fullText = (n.text || '') + ' ' + (n.original_text || '');
+    const matched = names.filter(nm => fullText.includes(nm));
+    const tagsHtml = matched.length ? `<div class="news-tags">${matched.map(nm => `<span class="news-stock-tag">${nm}</span>`).join('')}</div>` : '';
+    return `<div class="news-card">
+      <div class="news-card-hd">
+        <span class="news-badge">@${n.channel}</span>
+        <span class="news-time">${t}</span>
+      </div>
+      <div class="news-body">${body}</div>${docHtml}${tagsHtml}
+    </div>`;
+  }).join('');
+}
 
 async function loadNewsTab() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
   const qs = _newsFilter ? `&channel=${encodeURIComponent(_newsFilter)}` : '';
   const wrap = document.getElementById('news-list');
   if (!wrap) return;
+  _renderNewsStockBar();
   wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px">로딩 중...</div>';
   try {
     const res = await fetch(`${base}/api/news?limit=100${qs}`);
-    const data = await res.json();
-    if (!data.length) {
-      wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">뉴스 없음</div>';
-      return;
-    }
-    wrap.innerHTML = data.map(n => {
-      const d = n.savedAt ? new Date(n.savedAt) : null;
-      const t = d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '';
-      const body = (n.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const docHtml = n.doc_name ? `<div class="news-doc">📄 ${n.doc_name}</div>` : '';
-      return `<div class="news-card">
-        <div class="news-card-hd">
-          <span class="news-badge">@${n.channel}</span>
-          <span class="news-time">${t}</span>
-        </div>
-        <div class="news-body">${body}</div>${docHtml}
-      </div>`;
-    }).join('');
+    _newsAllData = await res.json();
+    _renderNewsCards();
   } catch(e) {
     wrap.innerHTML = `<div style="color:var(--red);text-align:center;padding:40px">로딩 실패: ${e.message}</div>`;
   }
@@ -6256,6 +6301,13 @@ function setNewsFilter(btn, ch) {
   document.querySelectorAll('.news-filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   loadNewsTab();
+}
+
+function setNewsStockFilter(btn, nm) {
+  _newsStockFilter = nm;
+  document.querySelectorAll('.news-stock-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _renderNewsCards();
 }
 
 async function loadMarketCap(force = false) {
