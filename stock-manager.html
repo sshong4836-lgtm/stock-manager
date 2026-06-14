@@ -399,6 +399,7 @@
     .news-doc { font-size:12px; color:var(--orange); margin-top:6px; }
     .news-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
     .news-stock-tag { font-size:11px; font-weight:700; background:rgba(34,197,94,.15); color:var(--green,#22c55e); padding:2px 8px; border-radius:10px; }
+    .news-api-tag { font-size:11px; font-weight:700; background:rgba(59,130,246,.18); color:#7cb8f7; padding:2px 8px; border-radius:10px; }
 
     /* ── 매매일지 관심종목 드롭다운 ── */
     .j-watch-dd {
@@ -6256,7 +6257,11 @@ function _renderNewsCards() {
   const names = _getWatchNames();
   let data = _newsAllData;
   if (_newsStockFilter) {
-    data = data.filter(n => ((n.text || '') + ' ' + (n.original_text || '')).includes(_newsStockFilter));
+    data = data.filter(n => {
+      const fullText = (n.text || '') + ' ' + (n.original_text || '');
+      const apiTags = Array.isArray(n.tags) ? n.tags : [];
+      return fullText.includes(_newsStockFilter) || apiTags.includes(_newsStockFilter);
+    });
   }
   if (!data.length) {
     wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px">뉴스 없음</div>';
@@ -6267,15 +6272,19 @@ function _renderNewsCards() {
     const t = d ? `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '';
     const body = (n.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const docHtml = n.doc_name ? `<div class="news-doc">📄 ${n.doc_name}</div>` : '';
+    // API 추출 태그 (파란색)
+    const apiTags = Array.isArray(n.tags) ? n.tags : [];
+    const apiTagsHtml = apiTags.length ? `<div class="news-tags">${apiTags.map(t => `<span class="news-api-tag">${t}</span>`).join('')}</div>` : '';
+    // 관심종목 매칭 태그 (초록색) — API 태그에 없는 것만
     const fullText = (n.text || '') + ' ' + (n.original_text || '');
-    const matched = names.filter(nm => fullText.includes(nm));
-    const tagsHtml = matched.length ? `<div class="news-tags">${matched.map(nm => `<span class="news-stock-tag">${nm}</span>`).join('')}</div>` : '';
+    const watchMatched = names.filter(nm => fullText.includes(nm) && !apiTags.includes(nm));
+    const watchTagsHtml = watchMatched.length ? `<div class="news-tags">${watchMatched.map(nm => `<span class="news-stock-tag">${nm}</span>`).join('')}</div>` : '';
     return `<div class="news-card">
       <div class="news-card-hd">
         <span class="news-badge">@${n.channel}</span>
         <span class="news-time">${t}</span>
       </div>
-      <div class="news-body">${body}</div>${docHtml}${tagsHtml}
+      <div class="news-body">${body}</div>${docHtml}${apiTagsHtml}${watchTagsHtml}
     </div>`;
   }).join('');
 }
