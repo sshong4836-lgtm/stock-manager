@@ -4391,11 +4391,12 @@ function saveWatchField(id, field, value) {
 function _syncAlertsToServer(w) {
   if (!w.ticker) return;
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
   fetch(`${base}/api/alerts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
     body: JSON.stringify({
-      code:         w.ticker,
+      code:         code,
       name:         w.stock,
       stopLoss:     w.stopPrice     || 0,
       target:       w.target        || 0,
