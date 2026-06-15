@@ -4384,7 +4384,24 @@ function saveWatchField(id, field, value) {
   }
   if (['target','supportPrice','stopPrice'].includes(field)) {
     updateWatchBadgesInPlace(id);
+    _syncAlertsToServer(w);
   }
+}
+
+function _syncAlertsToServer(w) {
+  if (!w.ticker) return;
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  fetch(`${base}/api/alerts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+    body: JSON.stringify({
+      code:         w.ticker,
+      name:         w.stock,
+      stopLoss:     w.stopPrice     || 0,
+      target:       w.target        || 0,
+      supportPrice: w.supportPrice  || 0,
+    })
+  }).catch(e => console.warn('alerts 동기화 실패:', e.message));
 }
 
 function _badgeInner(label, val) {
@@ -4460,6 +4477,7 @@ function startWatchBadgeEdit(e, id, field) {
       const detailInp = panel.querySelector(`input[onchange*="'${field}'"]`);
       if (detailInp) detailInp.value = val || '';
     }
+    _syncAlertsToServer(w);
   };
   const restore = () => {
     if (done) return; done = true;
