@@ -999,9 +999,9 @@
 <div id="tab-watchlist" class="tab-content active">
   <div class="card">
     <div class="card-title">관심종목 추가</div>
-    <div class="form-grid">
-      <div class="form-group"><label>종목명</label><input type="text" id="w-stock" placeholder="예: NVIDIA"></div>
-      <div class="form-group">
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+      <div class="form-group" style="margin-bottom:0"><label>종목명</label><input type="text" id="w-stock" placeholder="예: NVIDIA"></div>
+      <div class="form-group" style="margin-bottom:0">
         <label>종목코드</label>
         <div style="display:flex;gap:4px">
           <input type="text" id="w-ticker" placeholder="예: 005930 또는 005930.KS" style="flex:1"
@@ -1009,34 +1009,14 @@
           <button type="button" id="w-ticker-search-btn" class="btn btn-ghost btn-sm" onclick="searchWatchTicker()" title="키움 API에서 종목명 자동 조회">🔍 조회</button>
         </div>
       </div>
-      <div class="form-group">
-        <label>그룹</label>
-        <select id="w-group" onchange="updateWatchFormBuyFields()">
-          <option value="watch1">🔵 관찰1</option>
-          <option value="watch2">🟣 관찰2</option>
-          <option value="ready">🟡 매수대기</option>
-          <option value="holding">🔴 보유종목</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>매수금액 (원/주)</label>
-        <input type="number" id="w-buy-amount" placeholder="주당 매수가" disabled style="opacity:0.4">
-      </div>
-      <div class="form-group">
-        <label>수량</label>
-        <input type="number" id="w-buy-qty" placeholder="0" disabled style="opacity:0.4">
-      </div>
-      <div class="form-group">
-        <label>매수날짜</label>
-        <input type="date" id="w-buy-date" disabled style="opacity:0.4">
-      </div>
-      <div class="form-group">
-        <label>계좌</label>
-        <select id="w-buy-account" disabled style="opacity:0.4">
-          <option value="삼성">삼성계좌</option>
-          <option value="키움">키움계좌</option>
-          <option value="NH">NH계좌</option>
-        </select>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:7px">그룹</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="w-group-select">
+        <button type="button" class="btn btn-sm w-grp-btn btn-primary active" data-group="watch1"  onclick="selectWatchFormGroup(this)">🔵 관찰1</button>
+        <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="watch2"  onclick="selectWatchFormGroup(this)">🟣 관찰2</button>
+        <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="ready"   onclick="selectWatchFormGroup(this)">🟡 매수대기</button>
+        <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="holding" onclick="selectWatchFormGroup(this)">🔴 보유종목</button>
       </div>
     </div>
     <button class="btn btn-primary" onclick="addWatch()">+ 관심종목 추가</button>
@@ -3562,16 +3542,7 @@ function syncHoldingWatchlistWithPortfolio(allRows) {
   if (changed) save('watchlist', watchlist);
 }
 
-function updateWatchFormBuyFields() {
-  const grp = document.getElementById('w-group').value;
-  const disabled = grp !== 'holding' && grp !== 'ready';
-  ['w-buy-amount','w-buy-qty','w-buy-date','w-buy-account'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.disabled = disabled;
-    el.style.opacity = disabled ? '0.4' : '1';
-  });
-}
+function updateWatchFormBuyFields() { /* 폼 간소화로 더 이상 사용하지 않음 */ }
 
 function moveWatchToReady(id) {
   const w = watchlist.find(x => x.id === id);
@@ -3689,26 +3660,35 @@ async function searchWatchTicker() {
   }
 }
 
+function selectWatchFormGroup(btn) {
+  document.querySelectorAll('#w-group-select .w-grp-btn').forEach(b => {
+    b.classList.remove('active', 'btn-primary');
+    b.classList.add('btn-ghost');
+  });
+  btn.classList.remove('btn-ghost');
+  btn.classList.add('active', 'btn-primary');
+}
+
 function addWatch() {
-  const stock     = document.getElementById('w-stock').value.trim();
-  const ticker    = document.getElementById('w-ticker').value.trim().toUpperCase();
-  const group     = document.getElementById('w-group').value || 'watch1';
-  const buyAmount  = parseFloat(document.getElementById('w-buy-amount').value) || 0;
-  const buyQty     = parseFloat(document.getElementById('w-buy-qty').value)    || 0;
-  const buyDate    = document.getElementById('w-buy-date').value || '';
-  const buyAccount = document.getElementById('w-buy-account').value || '삼성';
+  const stock  = document.getElementById('w-stock').value.trim();
+  const ticker = document.getElementById('w-ticker').value.trim().toUpperCase();
+  const grpBtn = document.querySelector('#w-group-select .w-grp-btn.active');
+  const group  = grpBtn ? grpBtn.dataset.group : 'watch1';
   if (!stock) { toast('종목명을 입력하세요.','red'); return; }
-  const item = { id:Date.now(), stock, ticker, group, buyAmount, buyQty, buyDate };
-  if (group === 'ready' || group === 'holding') item.account = buyAccount;
+  const item = { id:Date.now(), stock, ticker, group };
   if (_watchSearchPrice) item.price = _watchSearchPrice;
   _watchSearchPrice = 0;
   watchlist.unshift(item);
   save('watchlist', watchlist);
   renderWatchlist();
-  ['w-stock','w-ticker','w-buy-amount','w-buy-qty','w-buy-date'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('w-buy-account').value = '삼성';
-  document.getElementById('w-group').value = 'watch1';
-  updateWatchFormBuyFields();
+  ['w-stock','w-ticker'].forEach(id => document.getElementById(id).value = '');
+  // 그룹 버튼 관찰1로 초기화
+  document.querySelectorAll('#w-group-select .w-grp-btn').forEach(b => {
+    const isFirst = b.dataset.group === 'watch1';
+    b.classList.toggle('active', isFirst);
+    b.classList.toggle('btn-primary', isFirst);
+    b.classList.toggle('btn-ghost', !isFirst);
+  });
   toast(`${stock}이(가) 관심종목에 추가되었습니다.`);
 }
 
