@@ -4187,7 +4187,18 @@ window.addEventListener('resize', () => { clearTimeout(_fitNamesTimer); _fitName
 // ── 상세패널 토글 ──
 function toggleWatchDetail(id) {
   const panel = document.getElementById('wc-detail-' + id);
-  if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (!panel) return;
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    const w = watchlist.find(x => x.id === id);
+    if (w) {
+      ['supportPrice', 'stopPrice', 'target'].forEach(field => {
+        const inp = panel.querySelector(`input[onchange*="'${field}'"]`);
+        if (inp) inp.value = w[field] || '';
+      });
+    }
+  }
 }
 
 // ── 순서 이동 (▲▼) ──
@@ -4463,6 +4474,12 @@ function startWatchBadgeEdit(e, id, field) {
     w[field] = val;
     save('watchlist', watchlist);
     applyVal(val);
+    // 상세설정 패널이 열려있으면 해당 입력칸도 동기화
+    const panel = document.getElementById('wc-detail-' + id);
+    if (panel && panel.style.display !== 'none') {
+      const detailInp = panel.querySelector(`input[onchange*="'${field}'"]`);
+      if (detailInp) detailInp.value = val || '';
+    }
   };
   const restore = () => {
     if (done) return; done = true;
