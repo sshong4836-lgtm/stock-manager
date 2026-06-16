@@ -844,12 +844,15 @@
      TAB 5 : ETF 전용
 ══════════════════════════════ -->
 <div id="tab-etf" class="tab-content">
-  <div class="sub-tabs">
-    <button class="sub-tab-btn active" onclick="switchEtfSubTab(this,'nh1')">🏦 NH연금1</button>
-    <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh2')">🏦 NH연금2</button>
-    <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh3')">🏦 NH연금3</button>
-    <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s1')">📊 삼성ETF1</button>
-    <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s2')">📊 삼성ETF2</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+    <div class="sub-tabs" style="margin-bottom:0">
+      <button class="sub-tab-btn active" onclick="switchEtfSubTab(this,'nh1')">🏦 NH연금1</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh2')">🏦 NH연금2</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh3')">🏦 NH연금3</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s1')">📊 삼성ETF1</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s2')">📊 삼성ETF2</button>
+    </div>
+    <button id="etf-div-update-btn" class="btn btn-success btn-sm no-print" onclick="updateEtfDividendsAll()">🔄 배당수익률 자동업데이트</button>
   </div>
   <div id="sub-etf-nh1" class="sub-tab-content active"></div>
   <div id="sub-etf-nh2" class="sub-tab-content"></div>
@@ -863,52 +866,32 @@
 ══════════════════════════════ -->
 <div id="tab-etfmgmt" class="tab-content">
 
-  <div class="two-col">
-
-    <!-- ETF 매매 기록 추가 -->
-    <div class="card">
-      <div class="card-title">ETF 매매 기록 추가</div>
-      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
-        <div class="form-group"><label>계좌</label>
-          <select id="etfm-acct">
-            <option value="nh1">NH연금1</option>
-            <option value="nh2">NH연금2</option>
-            <option value="nh3">NH연금3</option>
-            <option value="s1">삼성ETF1</option>
-            <option value="s2">삼성ETF2</option>
-          </select>
-        </div>
-        <div class="form-group"><label>날짜</label><input type="date" id="etfm-date"></div>
-        <div class="form-group"><label>ETF명</label><input type="text" id="etfm-stock" placeholder="예: TIGER 200" list="etfm-stock-list"><datalist id="etfm-stock-list"></datalist></div>
-        <div class="form-group"><label>구분</label>
-          <select id="etfm-type">
-            <option value="buy">📗 매수</option>
-            <option value="sell">📕 매도</option>
-          </select>
-        </div>
-        <div class="form-group"><label>수량 (주)</label><input type="number" id="etfm-qty" placeholder="0" min="0"></div>
-        <div class="form-group"><label>가격 (원)</label><input type="number" id="etfm-price" placeholder="0" min="0"></div>
-        <div class="form-group"><label>수수료 (원)</label><input type="number" id="etfm-fee" placeholder="0" min="0" value="0"></div>
+  <!-- ETF 매매 기록 추가 -->
+  <div class="card">
+    <div class="card-title">ETF 매매 기록 추가</div>
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+      <div class="form-group"><label>계좌</label>
+        <select id="etfm-acct">
+          <option value="nh1">NH연금1</option>
+          <option value="nh2">NH연금2</option>
+          <option value="nh3">NH연금3</option>
+          <option value="s1">삼성ETF1</option>
+          <option value="s2">삼성ETF2</option>
+        </select>
       </div>
-      <button class="btn btn-orange" onclick="addEtfJournalFor()">+ 매매 기록 추가</button>
+      <div class="form-group"><label>날짜</label><input type="date" id="etfm-date"></div>
+      <div class="form-group"><label>ETF명</label><input type="text" id="etfm-stock" placeholder="예: TIGER 200" list="etfm-stock-list"><datalist id="etfm-stock-list"></datalist></div>
+      <div class="form-group"><label>구분</label>
+        <select id="etfm-type">
+          <option value="buy">📗 매수</option>
+          <option value="sell">📕 매도</option>
+        </select>
+      </div>
+      <div class="form-group"><label>수량 (주)</label><input type="number" id="etfm-qty" placeholder="0" min="0"></div>
+      <div class="form-group"><label>가격 (원)</label><input type="number" id="etfm-price" placeholder="0" min="0"></div>
+      <div class="form-group"><label>수수료 (원)</label><input type="number" id="etfm-fee" placeholder="0" min="0" value="0"></div>
     </div>
-
-    <!-- ETF 배당 설정 -->
-    <div class="card">
-      <div class="card-title">ETF 배당 설정</div>
-      <div class="info-note info-note-orange">종목명으로 한 번만 설정하면 해당 종목을 보유한 <strong>모든 계좌에 자동 적용</strong>됩니다.</div>
-      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
-        <div class="form-group"><label>ETF명</label><input type="text" id="etfd-stock" placeholder="예: TIGER 미국배당다우존스" list="etfm-stock-list"></div>
-        <div class="form-group"><label>현재가 (원)</label><input type="number" id="etfd-cur" placeholder="0"></div>
-        <div class="form-group"><label>연간 주당배당금 (원)</label><input type="number" id="etfd-dps" placeholder="0" step="0.01"></div>
-      </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label>배당 지급 월 (복수 선택)</label>
-        <div class="row-flex" style="flex-wrap:wrap;gap:6px;margin-top:6px" id="etfd-months-wrap"></div>
-      </div>
-      <button class="btn btn-orange" onclick="saveEtfDivSettingFor()">배당 설정 저장 (전 계좌 일괄 적용)</button>
-    </div>
-
+    <button class="btn btn-orange" onclick="addEtfJournalFor()">+ 매매 기록 추가</button>
   </div>
 
   <!-- 전체 계좌 합산 요약 -->
@@ -2967,6 +2950,20 @@ function updateEtfCurPrice(acctId, stock, val) {
   renderEtfAllSummary();
 }
 
+function updateEtfDivYield(acctId, stock, yieldPct) {
+  if (!etfAcctD[acctId][stock]) etfAcctD[acctId][stock] = {};
+  const pct = parseFloat(yieldPct);
+  if (yieldPct === '' || isNaN(pct) || pct <= 0) {
+    delete etfAcctD[acctId][stock].annualDPS;
+  } else {
+    const cur = etfAcctD[acctId][stock]?.cur || (calcEtfH(acctId)[stock]?.avg) || 0;
+    etfAcctD[acctId][stock].annualDPS = cur > 0 ? Math.round(cur * pct / 100 * 100) / 100 : pct;
+  }
+  saveEtfD(acctId);
+  renderEtfAcctTab(acctId);
+  renderEtfAllSummary();
+}
+
 // ── ETF 서브탭 전환 ──
 function switchEtfSubTab(btn, acctId) {
   document.querySelectorAll('#tab-etf .sub-tab-content').forEach(el => el.classList.remove('active'));
@@ -3074,7 +3071,6 @@ function renderEtfAcctTab(acctId) {
         <div class="card-title" style="margin:0">ETF 보유 현황</div>
         <div class="row-flex" style="gap:8px">
           <button id="etf-fetch-btn-${acctId}" class="btn btn-primary btn-sm no-print" onclick="fetchEtfPrices('${acctId}')">🔄 시세 가져오기</button>
-          <button id="etf-div-btn-${acctId}" class="btn btn-success btn-sm no-print" onclick="updateEtfDividends('${acctId}')">💰 배당수익률 자동 업데이트</button>
           <button class="btn btn-orange btn-sm no-print" onclick="exportEtfCSV('${acctId}')">📥 CSV</button>
         </div>
       </div>
@@ -3108,12 +3104,20 @@ function renderEtfAcctTab(acctId) {
             </td>
             <td class="text-right">${fmt(r.val)}원</td>
             <td class="text-right ${cc(r.capitalGain)}">${sign(r.capitalGain)}${fmt(r.capitalGain)}원 <span class="${cc(r.capitalPct)}" style="font-size:11px">(${sign(r.capitalPct)}${fmtF(r.capitalPct,2)}%)</span></td>
-            <td class="text-right text-yellow">${r.divYield > 0
-              ? (r.isAuto
-                  ? `${fmtF(r.divYield,2)}% <span style="font-size:10px;color:var(--muted);background:rgba(128,128,128,.15);border-radius:3px;padding:1px 4px" title="ETFcheck 자동 (${r.autoData?.updatedAt||''})">자동</span>${r.autoData?.lastDivDate ? `<div style="font-size:10px;color:var(--muted)">배당락 ${r.autoData.lastDivDate}</div>` : ''}`
-                  : fmtF(r.divYield,2) + '%')
-              : '<span class="text-muted">미설정</span>'
-            }</td>
+            <td class="text-right">
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+                <div style="display:flex;align-items:center;gap:3px">
+                  <input type="number" class="cur-input" step="0.01" min="0"
+                    style="width:68px;text-align:right;${!r.isAuto && r.divYield > 0 ? 'color:var(--yellow)' : ''}"
+                    value="${!r.isAuto && r.divYield > 0 ? fmtF(r.divYield,2) : ''}"
+                    placeholder="${r.autoData?.dividendYield != null ? r.autoData.dividendYield : '0.00'}"
+                    onchange="updateEtfDivYield('${acctId}','${r.stock}',this.value)"
+                    title="${r.isAuto ? `ETFcheck 자동 (${r.autoData?.updatedAt||''}) — 입력 시 수동 값으로 저장` : '배당수익률 직접 입력 (%)'}">
+                  <span style="font-size:11px;color:var(--muted)">%</span>
+                </div>
+                ${r.isAuto ? `<div style="display:flex;gap:4px;align-items:center"><span style="font-size:10px;color:var(--muted);background:rgba(128,128,128,.15);border-radius:3px;padding:1px 4px">자동</span>${r.autoData?.lastDivDate ? `<span style="font-size:10px;color:var(--muted)">배당락 ${r.autoData.lastDivDate}</span>` : ''}</div>` : ''}
+              </div>
+            </td>
             <td class="text-right text-yellow">${r.annualDivNet>0
               ? fmt(r.annualDivNet)+'원'+(r.isAuto?` <span style="font-size:10px;color:var(--muted)">자동</span>`:'')
               :'<span class="text-muted">-</span>'}</td>
@@ -3659,7 +3663,7 @@ async function updateEtfDividends(acctId) {
     toast('종목코드가 등록된 ETF가 없습니다. 종목코드를 먼저 입력하세요.', 'red'); return;
   }
 
-  const btn = document.getElementById(`etf-div-btn-${acctId}`);
+  const btn = document.getElementById('etf-div-update-btn');
   if (btn) { btn.disabled = true; btn.textContent = `⏳ 조회 중... (${codes.length}개)`; }
 
   try {
@@ -3677,8 +3681,14 @@ async function updateEtfDividends(acctId) {
   } catch(e) {
     toast(`배당수익률 업데이트 실패: ${e.message}`, 'red');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💰 배당수익률 자동 업데이트'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 배당수익률 자동업데이트'; }
   }
+}
+
+function updateEtfDividendsAll() {
+  const active = document.querySelector('#tab-etf .sub-tab-content.active');
+  const acctId = active ? active.id.replace('sub-etf-', '') : 'nh1';
+  updateEtfDividends(acctId);
 }
 
 async function searchWatchTicker() {
