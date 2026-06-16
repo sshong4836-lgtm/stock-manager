@@ -4070,15 +4070,37 @@ function renderWatchlist() {
       ].filter(([k]) => w[k] && _ss[k])
        .map(([,l]) => `<span style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">${l}</span>`)
        .join('');
+      // 추세선돌파: alertTrend 활성화 + 로컬 데이터로 직접 판단
+      if (w.alertTrend) {
+        const _td1 = w.trendH1Date, _td2 = w.trendH2Date, _tp1 = parseFloat(w.trendH1Price);
+        let _trendBreak = false;
+        if (_td1 && _td2) {
+          const tl = calcTrendlinePrice(w);
+          _trendBreak = tl !== null && w.price > tl;
+        } else if (_tp1 > 0 && w.price > _tp1) {
+          _trendBreak = true;
+        }
+        if (_trendBreak)
+          w2SigBadges += `<span style="background:rgba(63,185,80,.18);color:var(--green);border:1px solid rgba(63,185,80,.4);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">📉돌파</span>`;
+      }
     }
 
     const _d1 = w.trendH1Date, _d2 = w.trendH2Date, _p1 = parseFloat(w.trendH1Price);
     let trendBadge = '';
     if (_d1 && _d2) {
+      // 케이스 A: 고점 2개 → 하락 추세선
       const tlPrice = calcTrendlinePrice(w);
       if (tlPrice !== null && w.price && w.price > tlPrice)
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="하락추세선 상향돌파 중">📈 돌파</span>`;
+    } else if (_d1 && !_d2 && _p1 > 0 && w.price) {
+      // 케이스 B: 고점1 날짜+가격만 → 수평 저항선 (날짜 포함)
+      const resPct = (w.price - _p1) / _p1 * 100;
+      if (w.price > _p1)
+        trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 돌파 중">🚀 저항선 돌파</span>`;
+      else if (Math.abs(resPct) <= 3)
+        trendBadge = `<span class="badge trendline-badge" style="background:rgba(240,136,62,.2);color:var(--orange);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 근접">⚠️ 저항선 근접</span>`;
     } else if (!_d1 && !_d2 && _p1 > 0 && w.price) {
+      // 케이스 C: 가격만 입력 (날짜 없음) → 수평 저항선
       const resPct = (w.price - _p1) / _p1 * 100;
       if (w.price > _p1)
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 돌파 중">🚀 저항선 돌파</span>`;
