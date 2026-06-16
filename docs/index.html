@@ -312,7 +312,7 @@
     .alert-checks-note {
       margin-top: 9px; font-size: 11px; color: var(--muted);
       background: rgba(240,136,62,.08); border: 1px solid rgba(240,136,62,.25);
-      border-radius: 6px; padding: 6px 10px;
+      border-radius: 6px; padding: 8px 10px; line-height: 1.7;
     }
 
     /* ── Misc ── */
@@ -4010,7 +4010,17 @@ function renderWatchlist() {
                   ${selCount >= minCount && selCount > 0 ? `✅ 알림 조건 충족` : `${selCount}개 선택 · ${minCount}개 이상 동시 충족 시 알림`}
                 </span>
               </div>
-              <div class="alert-checks-note">🚀 거래량급증 + (정배열 or 골든크로스 or 양봉전환) 동시 충족 시 긴급알림</div>`;
+              <div class="alert-checks-note">
+                🚀 <b>긴급알림 조건</b> (하나라도 충족 시):<br>
+                &nbsp;· 거래량급증 + 정배열 동시 충족<br>
+                &nbsp;· 거래량급증 + 골든크로스 동시 충족<br>
+                &nbsp;· 거래량급증 + 양봉전환 동시 충족<br>
+                &nbsp;· 거래량급증 + RSI과매도탈출 동시 충족<br>
+                &nbsp;· 추세선돌파 (단독 긴급알림)<br>
+                📊 <b>일반알림 조건</b>:<br>
+                &nbsp;· 정배열 단독 진입<br>
+                &nbsp;· 위 5가지 조건 중 2개 이상 동시 충족
+              </div>`;
             } else {
               return `
               <div class="alert-checks-title">🔔 알림 조건 (관찰1 · 추세·지지)</div>
