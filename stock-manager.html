@@ -4030,10 +4030,11 @@ function renderWatchlist() {
             }
           })()}
         </div>
+        ${(wGrp !== 'watch1' && wGrp !== 'watch2') ? `
         <div class="form-group" style="margin-bottom:12px;margin-top:14px">
           <label>메모 / 진입 조건</label>
           <textarea onchange="saveWatchField(${w.id},'memo',this.value)">${eh(w.memo)}</textarea>
-        </div>
+        </div>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})">✕ 닫기</button>
       </div>`;
 
