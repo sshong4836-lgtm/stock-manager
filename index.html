@@ -184,7 +184,8 @@
     @media(max-width:600px) { .wc-actions .wc-label-btn { display:none; } }
     .wc-order-btns { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
     /* 가격 배지 */
-    .wc-badge { display:inline-flex; align-items:center; justify-content:space-between; gap:4px; width:120px; flex-shrink:0; border-radius:4px; padding:1px 8px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; box-sizing:border-box; }
+    .wc-badge { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; min-width:80px; flex-shrink:0; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; box-sizing:border-box; }
+    .wc-bsig { font-size:9px; font-weight:800; flex-shrink:0; letter-spacing:-.2px; }
     .wc-badge:hover { opacity:.75; }
     .wc-badge-green  { background:rgba(63,185,80,.15); color:var(--green); border-color:rgba(63,185,80,.3); }
     .wc-badge-blue   { background:rgba(88,166,255,.15); color:var(--blue);  border-color:rgba(88,166,255,.3); }
@@ -4019,6 +4020,23 @@ function renderWatchlist() {
         <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})">✕ 닫기</button>
       </div>`;
 
+    // watch2 조건 충족 배지 계산
+    let w2SigBadges = '';
+    if (wGrp === 'watch2') {
+      const _sigs = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
+      const _code = (w.ticker || '').replace(/\.(KS|KQ)$/i, '');
+      const _ss   = _sigs[_code] || {};
+      w2SigBadges = [
+        ['alertRsiOversold','📈RSI'],
+        ['alertVolume',     '📊거래량'],
+        ['alertBullish',    '🕯양봉'],
+        ['alertGoldenCross','🌟골든X'],
+        ['alertMaAlignment','📐정배열'],
+      ].filter(([k]) => w[k] && _ss[k])
+       .map(([,l]) => `<span style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">${l}</span>`)
+       .join('');
+    }
+
     const _d1 = w.trendH1Date, _d2 = w.trendH2Date, _p1 = parseFloat(w.trendH1Price);
     let trendBadge = '';
     if (_d1 && _d2) {
@@ -4071,12 +4089,12 @@ function renderWatchlist() {
               <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
             </div>
             <div class="wc-price-badges">
-              <span class="wc-badge ${w.supportPrice ? 'wc-badge-blue'  : 'wc-badge-empty'}" data-field="supportPrice" onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정"><span class="wc-bl">지지</span><span class="wc-bv">${w.supportPrice ? fmt(Math.round(w.supportPrice)) : '—'}</span></span>
-              <span class="wc-badge ${w.stopPrice    ? 'wc-badge-red'   : 'wc-badge-empty'}" data-field="stopPrice"    onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정"><span class="wc-bl">손절</span><span class="wc-bv">${w.stopPrice    ? fmt(Math.round(w.stopPrice))    : '—'}</span></span>
-              <span class="wc-badge ${w.target       ? 'wc-badge-green' : 'wc-badge-empty'}" data-field="target"       onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정"><span class="wc-bl">목표</span><span class="wc-bv">${w.target       ? fmt(Math.round(w.target))       : '—'}</span></span>
+              ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
+              ${_wcBadgeHtml(w.id,'stopPrice',   'wc-badge-red',  '손절',w.stopPrice,   w.price)}
+              ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
             </div>
             <div class="wc-actions no-print" style="margin-left:auto">
-              ${trendBadge}
+              ${trendBadge}${w2SigBadges}
               <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
               <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
             </div>
@@ -4127,12 +4145,12 @@ function renderWatchlist() {
             <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
           </div>
           <div class="wc-price-badges">
-            <span class="wc-badge ${w.supportPrice ? 'wc-badge-blue'  : 'wc-badge-empty'}" data-field="supportPrice" onclick="startWatchBadgeEdit(event,${w.id},'supportPrice')" title="지지선 클릭하여 수정"><span class="wc-bl">지지</span><span class="wc-bv">${w.supportPrice ? fmt(Math.round(w.supportPrice)) : '—'}</span></span>
-            <span class="wc-badge ${w.stopPrice    ? 'wc-badge-red'   : 'wc-badge-empty'}" data-field="stopPrice"    onclick="startWatchBadgeEdit(event,${w.id},'stopPrice')"    title="손절가 클릭하여 수정"><span class="wc-bl">손절</span><span class="wc-bv">${w.stopPrice    ? fmt(Math.round(w.stopPrice))    : '—'}</span></span>
-            <span class="wc-badge ${w.target       ? 'wc-badge-green' : 'wc-badge-empty'}" data-field="target"       onclick="startWatchBadgeEdit(event,${w.id},'target')"       title="목표가 클릭하여 수정"><span class="wc-bl">목표</span><span class="wc-bv">${w.target       ? fmt(Math.round(w.target))       : '—'}</span></span>
+            ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
+            ${_wcBadgeHtml(w.id,'stopPrice',   'wc-badge-red',  '손절',w.stopPrice,   w.price)}
+            ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
           </div>
           <div class="wc-actions no-print" style="margin-left:auto">
-            ${trendBadge}
+            ${trendBadge}${w2SigBadges}
             ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
             ${wGrp==='ready' ? `
               <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
@@ -4405,8 +4423,27 @@ function _syncAlertsToServer(w) {
   }).catch(e => console.warn('alerts 동기화 실패:', e.message));
 }
 
-function _badgeInner(label, val) {
-  return `<span class="wc-bl">${label}</span><span class="wc-bv">${val ? fmt(Math.round(val)) : '—'}</span>`;
+function _badgeSig(field, val, price) {
+  if (!val || !price) return '';
+  if (field === 'supportPrice') {
+    if (price < val)                    return '<span class="wc-bsig" style="color:var(--red)">🔴이탈</span>';
+    if ((price - val) / val * 100 <= 3) return '<span class="wc-bsig" style="color:var(--yellow)">⚠️근접</span>';
+  } else if (field === 'stopPrice') {
+    if (price < val)                    return '<span class="wc-bsig" style="color:var(--red)">🚨이탈</span>';
+    if ((price - val) / val * 100 <= 5) return '<span class="wc-bsig" style="color:var(--yellow)">⚠️근접</span>';
+  } else if (field === 'target') {
+    if (price >= val)                   return '<span class="wc-bsig" style="color:var(--green)">✅도달</span>';
+    if ((val - price) / val * 100 <= 5) return '<span class="wc-bsig" style="color:var(--blue)">📈근접</span>';
+  }
+  return '';
+}
+
+function _badgeInner(label, val, field, price) {
+  return `<span class="wc-bl">${label}</span><span class="wc-bv">${val ? fmt(Math.round(val)) : '—'}</span>${(field && price) ? _badgeSig(field, val, price) : ''}`;
+}
+
+function _wcBadgeHtml(id, field, cls, label, val, price) {
+  return `<span class="wc-badge ${val ? cls : 'wc-badge-empty'}" data-field="${field}" onclick="startWatchBadgeEdit(event,${id},'${field}')" title="${label} 클릭하여 수정">${_badgeInner(label, val, field, price)}</span>`;
 }
 
 function updateWatchBadgesInPlace(id) {
@@ -4420,7 +4457,7 @@ function updateWatchBadgesInPlace(id) {
     const val = w[field] || 0;
     const el = container.querySelector(`[data-field="${field}"]`);
     if (!el) return;
-    el.innerHTML = _badgeInner(meta.label, val);
+    el.innerHTML = _badgeInner(meta.label, val, field, w.price);
     el.classList.toggle('wc-badge-empty', !val);
     el.classList.toggle(meta.cls, !!val);
   });
@@ -4456,7 +4493,7 @@ function startWatchBadgeEdit(e, id, field) {
   const meta = _BADGE_META[field];
 
   const applyVal = (val) => {
-    badge.innerHTML = _badgeInner(meta.label, val);
+    badge.innerHTML = _badgeInner(meta.label, val, field, w.price);
     badge.classList.toggle('wc-badge-empty', !val);
     badge.classList.toggle(meta.cls, !!val);
   };
@@ -5997,6 +6034,15 @@ async function checkPortfolioAlerts(rows) {
 }
 
 // ══════════════════════════════════════════════════════
+// watch2 분석 신호 fetch → localStorage 'sm-watch2-signals' 갱신
+function fetchWatch2Signals() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  fetch(`${base}/api/watch2/signals`, { headers:{'ngrok-skip-browser-warning':'1'} })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { if (d && Object.keys(d).length) { localStorage.setItem('sm-watch2-signals', JSON.stringify(d)); renderWatchlist(); } })
+    .catch(() => {});
+}
+
 // ★ 실시간 SSE 연동 (맥미니 proxy → 웹앱 자동 업데이트)
 // ══════════════════════════════════════════════════════
 let _sseSource = null;
@@ -6017,8 +6063,9 @@ function startRealtimeSSE() {
       _sseRetryCount = 0;
       updateSSEStatus(true);
       console.log('✅ 실시간 SSE 연결');
-      // 관심종목 종목코드 등록
+      // 관심종목 종목코드 등록 + watch2 신호 갱신
       registerWatchlistToSSE();
+      fetchWatch2Signals();
     };
 
     _sseSource.onmessage = (e) => {

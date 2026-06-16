@@ -709,6 +709,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // ===== watch2 그룹 알림 시스템 =====
+let watch2LastSignals = {};  // { code: { alertRsiOversold, alertVolume, alertBullish, alertGoldenCross, alertMaAlignment, date } }
 
 async function fetchDailyCandles(code) {
   const now = new Date();
@@ -794,17 +795,11 @@ async function analyzeWatch2() {
       const opens   = candles.map(c => Math.abs(parseFloat(c.open_pric || 0)));
       const volumes = candles.map(c => parseFloat(c.trde_qty || 0));
 
-      const triggered = [];
+      // 조건별 신호 계산 (useX 플래그와 독립적으로 실제 조건 충족 여부 먼저 계산)
+      const rsiPrev  = n >= 50 ? calcRSI(closes.slice(0, -1)) : null;
+      const rsiCurr  = n >= 50 ? calcRSI(closes) : null;
+      const _sigRsi  = !!(rsiPrev !== null && rsiCurr !== null && rsiPrev <= 30 && rsiCurr > 30);
 
-      // 1. RSI(14) 과매도(30이하) 탈출 (Wilder smoothing 신뢰도를 위해 최소 50개 필요)
-      if (useRsi && n >= 50) {
-        const rsiPrev = calcRSI(closes.slice(0, -1));
-        const rsiCurr = calcRSI(closes);
-        if (rsiPrev !== null && rsiCurr !== null && rsiPrev <= 30 && rsiCurr > 30)
-          triggered.push(`RSI 과매도 탈출 (${rsiCurr.toFixed(1)})`);
-      }
-
-      // MA 계산
       const ma5   = calcMA(closes, 5);
       const ma20  = calcMA(closes, 20);
       const ma60  = calcMA(closes, 60);
@@ -812,24 +807,28 @@ async function analyzeWatch2() {
       const ma5p  = calcMA(closes.slice(0, -1), 5);
       const ma20p = calcMA(closes.slice(0, -1), 20);
 
-      // 2. 정배열 (MA5>MA20>MA60>MA120)
-      if (useMaAlignment && ma5 && ma20 && ma60 && ma120 && ma5 > ma20 && ma20 > ma60 && ma60 > ma120)
-        triggered.push(`정배열 (MA5>${ma5.toFixed(0)} MA20>${ma20.toFixed(0)} MA60>${ma60.toFixed(0)} MA120>${ma120.toFixed(0)})`);
+      const _sigMa   = !!(ma5 && ma20 && ma60 && ma120 && ma5 > ma20 && ma20 > ma60 && ma60 > ma120);
+      const _sigGc   = !!(ma5 !== null && ma20 !== null && ma5p !== null && ma20p !== null && ma5p <= ma20p && ma5 > ma20);
+      const _sigBull = !!(opens[n-2] > 0 && opens[n-1] > 0 && closes[n-2] < opens[n-2] && closes[n-1] > opens[n-1]);
+      const _sigVol  = !!(volumes[n-2] > 0 && volumes[n-1] >= volumes[n-2] * 2);
 
-      // 3. 골든크로스 (MA5가 MA20 상향돌파)
-      if (useGoldenCross && ma5 !== null && ma20 !== null && ma5p !== null && ma20p !== null && ma5p <= ma20p && ma5 > ma20)
-        triggered.push(`골든크로스 (MA5 ${ma5.toFixed(0)} ↑ MA20 ${ma20.toFixed(0)})`);
+      // 카드 배지용: 모든 조건의 실제 충족 여부 저장
+      watch2LastSignals[code] = {
+        alertRsiOversold: _sigRsi,
+        alertMaAlignment: _sigMa,
+        alertGoldenCross: _sigGc,
+        alertBullish:     _sigBull,
+        alertVolume:      _sigVol,
+        date: new Date().toISOString().slice(0, 10),
+      };
 
-      // 4. 양봉 전환 (전일 음봉 → 당일 양봉, 도지 제외)
-      if (useBullish && opens[n-2] > 0 && opens[n-1] > 0) {
-        const prevBear = closes[n-2] < opens[n-2];
-        const currBull = closes[n-1] > opens[n-1];
-        if (prevBear && currBull) triggered.push(`양봉 전환 (전일 음봉→당일 양봉)`);
-      }
-
-      // 5. 거래량 급증 (전일의 2배 이상)
-      if (useVolume && volumes[n-2] > 0 && volumes[n-1] >= volumes[n-2] * 2)
-        triggered.push(`거래량 급증 (전일의 ${(volumes[n-1] / volumes[n-2]).toFixed(1)}배)`);
+      // 알림 발송용: 활성화된 조건만 집계
+      const triggered = [];
+      if (useRsi         && _sigRsi)  triggered.push(`RSI 과매도 탈출 (${rsiCurr.toFixed(1)})`);
+      if (useMaAlignment && _sigMa)   triggered.push(`정배열 (MA5>${ma5.toFixed(0)} MA20>${ma20.toFixed(0)} MA60>${ma60.toFixed(0)} MA120>${ma120.toFixed(0)})`);
+      if (useGoldenCross && _sigGc)   triggered.push(`골든크로스 (MA5 ${ma5.toFixed(0)} ↑ MA20 ${ma20.toFixed(0)})`);
+      if (useBullish     && _sigBull) triggered.push(`양봉 전환 (전일 음봉→당일 양봉)`);
+      if (useVolume      && _sigVol)  triggered.push(`거래량 급증 (전일의 ${(volumes[n-1] / volumes[n-2]).toFixed(1)}배)`);
 
       console.log(`📊 ${code}: ${triggered.length}/${minAlertCount}개 조건 [${triggered.join(', ') || '없음'}]`);
 
@@ -862,6 +861,10 @@ setInterval(() => {
 }, 60 * 1000);
 
 // 수동 실행 엔드포인트
+app.get('/api/watch2/signals', (req, res) => {
+  res.json(watch2LastSignals);
+});
+
 app.post('/api/watch2/analyze', async (req, res) => {
   res.json({ status: 'started', message: 'watch2 분석 시작' });
   analyzeWatch2().catch(e => console.log('❌ watch2 수동 분석 오류:', e.message));
