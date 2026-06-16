@@ -3655,7 +3655,7 @@ async function updateEtfDividends(acctId) {
   const holdings = calcEtfH(acctId);
   const codes = [...new Set(
     Object.keys(holdings)
-      .filter(stock => holdings[stock].qty > 0.0001 && /^\d{6}$/.test(etfTickerMap[stock] || ''))
+      .filter(stock => holdings[stock].qty > 0.0001 && /^[A-Za-z0-9]{5,6}$/.test(etfTickerMap[stock] || ''))
       .map(stock => etfTickerMap[stock])
   )];
 
