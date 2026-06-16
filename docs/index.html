@@ -195,6 +195,10 @@
     .wc-bl { flex-shrink:0; width:22px; opacity:.85; }
     .wc-bv { flex-shrink:0; width:68px; font-size:12px; text-align:right; font-variant-numeric:tabular-nums; }
     .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; flex:1; min-width:0; padding:0; text-align:right; }
+    /* 관심종목 추가 폼 입력칸 */
+    .w-add-input { color:#fff !important; border-color:rgba(255,255,255,.22) !important; }
+    .w-add-input::placeholder { color:rgba(255,255,255,.38) !important; }
+    .w-add-input:focus { border-color:rgba(255,255,255,.55) !important; outline:none; }
     .wc-order-btn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-size:9px; padding:1px 5px; cursor:pointer; line-height:1.3; transition:color .15s, border-color .15s; font-family:inherit; }
     .wc-order-btn:hover:not(:disabled) { color:var(--blue); border-color:var(--blue); }
     .wc-order-btn:disabled { opacity:0.2; cursor:not-allowed; }
@@ -998,29 +1002,33 @@
      TAB 7 : 관심종목
 ══════════════════════════════ -->
 <div id="tab-watchlist" class="tab-content active">
-  <div class="card">
-    <div class="card-title">관심종목 추가</div>
-    <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
-      <div class="form-group" style="margin-bottom:0"><label>종목명</label><input type="text" id="w-stock" placeholder="예: NVIDIA"></div>
-      <div class="form-group" style="margin-bottom:0">
-        <label>종목코드</label>
-        <div style="display:flex;gap:4px">
-          <input type="text" id="w-ticker" placeholder="예: 005930 또는 005930.KS" style="flex:1"
-                 onkeydown="if(event.key==='Enter'){event.preventDefault();searchWatchTicker()}">
-          <button type="button" id="w-ticker-search-btn" class="btn btn-ghost btn-sm" onclick="searchWatchTicker()" title="키움 API에서 종목명 자동 조회">🔍 조회</button>
+  <div class="card" style="padding-bottom:14px">
+    <div class="card-title" onclick="toggleWatchAddForm()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+      관심종목 추가 <span id="w-add-arrow" style="font-size:10px;opacity:.7">▼</span>
+    </div>
+    <div id="w-add-form-body" style="display:none;margin-top:14px">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+        <div class="form-group" style="margin-bottom:0"><label>종목명</label><input type="text" id="w-stock" class="w-add-input" placeholder="예: NVIDIA"></div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>종목코드</label>
+          <div style="display:flex;gap:4px">
+            <input type="text" id="w-ticker" class="w-add-input" placeholder="예: 005930 또는 005930.KS" style="flex:1"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();searchWatchTicker()}">
+            <button type="button" id="w-ticker-search-btn" class="btn btn-ghost btn-sm" onclick="searchWatchTicker()" title="키움 API에서 종목명 자동 조회">🔍 조회</button>
+          </div>
         </div>
       </div>
-    </div>
-    <div style="margin-bottom:14px">
-      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:7px">그룹</label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap" id="w-group-select">
-        <button type="button" class="btn btn-sm w-grp-btn btn-primary active" data-group="watch1"  onclick="selectWatchFormGroup(this)">🔵 관찰1</button>
-        <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="watch2"  onclick="selectWatchFormGroup(this)">🟣 관찰2</button>
-        <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="ready"   onclick="selectWatchFormGroup(this)">🟡 매수대기</button>
-        <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="holding" onclick="selectWatchFormGroup(this)">🔴 보유종목</button>
+      <div style="margin-bottom:14px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:7px">그룹</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="w-group-select">
+          <button type="button" class="btn btn-sm w-grp-btn btn-primary active" data-group="watch1"  onclick="selectWatchFormGroup(this)">🔵 관찰1</button>
+          <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="watch2"  onclick="selectWatchFormGroup(this)">🟣 관찰2</button>
+          <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="ready"   onclick="selectWatchFormGroup(this)">🟡 매수대기</button>
+          <button type="button" class="btn btn-sm w-grp-btn btn-ghost"          data-group="holding" onclick="selectWatchFormGroup(this)">🔴 보유종목</button>
+        </div>
       </div>
+      <button class="btn btn-primary" onclick="addWatch()">+ 관심종목 추가</button>
     </div>
-    <button class="btn btn-primary" onclick="addWatch()">+ 관심종목 추가</button>
   </div>
   <div class="info-note info-note-blue" style="margin-bottom:12px;font-size:12px">6자리 종목코드를 입력 후 🔍 조회 버튼을 클릭하면 키움 API에서 종목명을 자동으로 불러옵니다. (예: 삼성전자 → <code>005930</code> 또는 <code>005930.KS</code>)</div>
   <div class="sub-tabs" id="w-group-tabs">
@@ -3668,6 +3676,14 @@ function selectWatchFormGroup(btn) {
   });
   btn.classList.remove('btn-ghost');
   btn.classList.add('active', 'btn-primary');
+}
+
+function toggleWatchAddForm() {
+  const body  = document.getElementById('w-add-form-body');
+  const arrow = document.getElementById('w-add-arrow');
+  const open  = body.style.display !== 'none';
+  body.style.display  = open ? 'none' : '';
+  arrow.textContent   = open ? '▼' : '▲';
 }
 
 function addWatch() {
