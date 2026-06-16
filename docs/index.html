@@ -3981,45 +3981,51 @@ function renderWatchlist() {
               const metColor  = selCount >= minCount && selCount > 0 ? 'var(--green)' : 'var(--muted)';
               const metText   = selCount > 0 ? `${selCount}/${W2_KEYS.length} 조건 충족!` : '0개 선택됨';
               return `
-              <div class="alert-checks-title" style="display:flex;justify-content:space-between;align-items:center">
+              <div class="alert-checks-title" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none"
+                onclick="(function(){ var b=document.getElementById('w2-alert-body-${w.id}'); var a=document.getElementById('w2-alert-arrow-${w.id}'); var open=b.style.display!=='none'; b.style.display=open?'none':''; a.textContent=open?'▼':'▲'; })()">
                 <span>🔔 알림 조건 (관찰2 · 복합)</span>
-                <span id="w2-alert-badge-${w.id}" style="font-size:11px;font-weight:700;color:${metColor};background:var(--bg3);padding:2px 8px;border-radius:10px;transition:color .2s">${metText}</span>
-              </div>
-              <div class="alert-checks-grid">
-                ${[
-                  ['alertRsiOversold', '📈 RSI 과매도 탈출 시 알림'],
-                  ['alertVolume',      '📊 거래량 급증 시 알림 (전일 대비 200% 이상)'],
-                  ['alertBullish',     '🕯 양봉 전환 시 알림'],
-                  ['alertGoldenCross', '🌟 골든크로스 시 알림'],
-                  ['alertMaAlignment', '📐 이동평균선 정배열 진입 시 알림 (5일>20일>60일>120일)'],
-                  ['alertTrend',       '📉 추세선/저항선 돌파 시 알림 (고점1·2 설정 필요)'],
-                ].map(([key, label]) => `
-                  <label class="alert-check-item">
-                    <input type="checkbox" ${w[key] ? 'checked' : ''} data-w2id="${w.id}"
-                      onchange="saveWatchField(${w.id},'${key}',this.checked);updateW2AlertBadge(${w.id});syncWatch2Meta()">
-                    <label>${label}</label>
-                  </label>`).join('')}
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;flex-wrap:wrap">
-                <span style="color:var(--muted)">최소 충족 조건 수:</span>
-                <select style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text)"
-                  onchange="saveWatchField(${w.id},'minAlertCount',+this.value);updateW2AlertBadge(${w.id})">
-                  ${[1,2,3,4,5].map(n => `<option value="${n}" ${minCount===n?'selected':''}>${n}개 이상</option>`).join('')}
-                </select>
-                <span id="w2-alert-note-${w.id}" style="color:var(--muted);font-size:11px">
-                  ${selCount >= minCount && selCount > 0 ? `✅ 알림 조건 충족` : `${selCount}개 선택 · ${minCount}개 이상 동시 충족 시 알림`}
+                <span style="display:flex;align-items:center;gap:6px">
+                  <span id="w2-alert-badge-${w.id}" style="font-size:11px;font-weight:700;color:${metColor};background:var(--bg3);padding:2px 8px;border-radius:10px;transition:color .2s">${metText}</span>
+                  <span id="w2-alert-arrow-${w.id}" style="font-size:10px;opacity:.7">▲</span>
                 </span>
               </div>
-              <div class="alert-checks-note">
-                🚀 <b>긴급알림 조건</b> (하나라도 충족 시):<br>
-                &nbsp;· 거래량급증 + 정배열 동시 충족<br>
-                &nbsp;· 거래량급증 + 골든크로스 동시 충족<br>
-                &nbsp;· 거래량급증 + 양봉전환 동시 충족<br>
-                &nbsp;· 거래량급증 + RSI과매도탈출 동시 충족<br>
-                &nbsp;· 추세선돌파 (단독 긴급알림)<br>
-                📊 <b>일반알림 조건</b>:<br>
-                &nbsp;· 정배열 단독 진입<br>
-                &nbsp;· 위 5가지 조건 중 2개 이상 동시 충족
+              <div id="w2-alert-body-${w.id}">
+                <div class="alert-checks-grid">
+                  ${[
+                    ['alertRsiOversold', '📈 RSI 과매도 탈출 시 알림'],
+                    ['alertVolume',      '📊 거래량 급증 시 알림 (전일 대비 200% 이상)'],
+                    ['alertBullish',     '🕯 양봉 전환 시 알림'],
+                    ['alertGoldenCross', '🌟 골든크로스 시 알림'],
+                    ['alertMaAlignment', '📐 이동평균선 정배열 진입 시 알림 (5일>20일>60일>120일)'],
+                    ['alertTrend',       '📉 추세선/저항선 돌파 시 알림 (고점1·2 설정 필요)'],
+                  ].map(([key, label]) => `
+                    <label class="alert-check-item">
+                      <input type="checkbox" ${w[key] ? 'checked' : ''} data-w2id="${w.id}"
+                        onchange="saveWatchField(${w.id},'${key}',this.checked);updateW2AlertBadge(${w.id});syncWatch2Meta()">
+                      <label>${label}</label>
+                    </label>`).join('')}
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;flex-wrap:wrap">
+                  <span style="color:var(--muted)">최소 충족 조건 수:</span>
+                  <select style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text)"
+                    onchange="saveWatchField(${w.id},'minAlertCount',+this.value);updateW2AlertBadge(${w.id})">
+                    ${[1,2,3,4,5].map(n => `<option value="${n}" ${minCount===n?'selected':''}>${n}개 이상</option>`).join('')}
+                  </select>
+                  <span id="w2-alert-note-${w.id}" style="color:var(--muted);font-size:11px">
+                    ${selCount >= minCount && selCount > 0 ? `✅ 알림 조건 충족` : `${selCount}개 선택 · ${minCount}개 이상 동시 충족 시 알림`}
+                  </span>
+                </div>
+                <div class="alert-checks-note">
+                  🚀 <b>긴급알림 조건</b> (하나라도 충족 시):<br>
+                  &nbsp;· 거래량급증 + 정배열 동시 충족<br>
+                  &nbsp;· 거래량급증 + 골든크로스 동시 충족<br>
+                  &nbsp;· 거래량급증 + 양봉전환 동시 충족<br>
+                  &nbsp;· 거래량급증 + RSI과매도탈출 동시 충족<br>
+                  &nbsp;· 추세선돌파 (단독 긴급알림)<br>
+                  📊 <b>일반알림 조건</b>:<br>
+                  &nbsp;· 정배열 단독 진입<br>
+                  &nbsp;· 위 조건 중 2개 이상 동시 충족
+                </div>
               </div>`;
             } else {
               return `
