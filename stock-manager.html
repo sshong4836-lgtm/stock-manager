@@ -3594,7 +3594,7 @@ function moveWatchBackTo(id, group) {
 function updateW2AlertBadge(watchId) {
   const w = watchlist.find(x => x.id === watchId);
   if (!w) return;
-  const W2_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment'];
+  const W2_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend'];
   // 체크박스 실제 상태를 DOM에서 읽음
   const cbs = document.querySelectorAll(`[data-w2id="${watchId}"]`);
   let selCount = 0;
@@ -3975,7 +3975,7 @@ function renderWatchlist() {
         <div class="alert-checks-section">
           ${(() => {
             if (wGrp === 'watch2') {
-              const W2_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment'];
+              const W2_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend'];
               const selCount  = W2_KEYS.filter(k => w[k]).length;
               const minCount  = w.minAlertCount || 2;
               const metColor  = selCount >= minCount && selCount > 0 ? 'var(--green)' : 'var(--muted)';
@@ -3992,10 +3992,11 @@ function renderWatchlist() {
                   ['alertBullish',     '🕯 양봉 전환 시 알림'],
                   ['alertGoldenCross', '🌟 골든크로스 시 알림'],
                   ['alertMaAlignment', '📐 이동평균선 정배열 진입 시 알림 (5일>20일>60일>120일)'],
+                  ['alertTrend',       '📉 추세선/저항선 돌파 시 알림 (고점1·2 설정 필요)'],
                 ].map(([key, label]) => `
                   <label class="alert-check-item">
                     <input type="checkbox" ${w[key] ? 'checked' : ''} data-w2id="${w.id}"
-                      onchange="saveWatchField(${w.id},'${key}',this.checked);updateW2AlertBadge(${w.id})">
+                      onchange="saveWatchField(${w.id},'${key}',this.checked);updateW2AlertBadge(${w.id});syncWatch2Meta()">
                     <label>${label}</label>
                   </label>`).join('')}
               </div>
@@ -4417,6 +4418,7 @@ function saveWatchField(id, field, value) {
   save('watchlist', watchlist);
   if (['trendH1Date','trendH1Price','trendH2Date','trendH2Price'].includes(field)) {
     updateTrendlineDisplay(id);
+    if (w.group === 'watch2') syncWatch2Meta();
   }
   if (['target','supportPrice','stopPrice'].includes(field)) {
     updateWatchBadgesInPlace(id);
@@ -6063,6 +6065,26 @@ function fetchWatch2Signals() {
     .catch(() => {});
 }
 
+function syncWatch2Meta() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  const meta = {};
+  watchlist.filter(w => w.group === 'watch2' && w.ticker).forEach(w => {
+    const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
+    meta[code] = {
+      alertTrend:   !!w.alertTrend,
+      trendH1Date:  w.trendH1Date  || '',
+      trendH1Price: w.trendH1Price || 0,
+      trendH2Date:  w.trendH2Date  || '',
+      trendH2Price: w.trendH2Price || 0,
+    };
+  });
+  fetch(`${base}/api/watch2/meta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+    body: JSON.stringify(meta),
+  }).catch(() => {});
+}
+
 // ★ 실시간 SSE 연동 (맥미니 proxy → 웹앱 자동 업데이트)
 // ══════════════════════════════════════════════════════
 let _sseSource = null;
@@ -6086,6 +6108,7 @@ function startRealtimeSSE() {
       // 관심종목 종목코드 등록 + watch2 신호 갱신
       registerWatchlistToSSE();
       fetchWatch2Signals();
+      syncWatch2Meta();
     };
 
     _sseSource.onmessage = (e) => {
