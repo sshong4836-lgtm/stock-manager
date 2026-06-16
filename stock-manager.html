@@ -1004,15 +1004,15 @@
 <div id="tab-watchlist" class="tab-content active">
   <div class="card" style="padding-bottom:14px">
     <div class="card-title" onclick="toggleWatchAddForm()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-      관심종목 추가 <span id="w-add-arrow" style="font-size:10px;opacity:.7">▼</span>
+      관심종목 추가 <span id="w-add-arrow" style="font-size:10px;opacity:.7">▲</span>
     </div>
-    <div id="w-add-form-body" style="display:none;margin-top:14px">
+    <div id="w-add-form-body" style="margin-top:14px">
       <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
-        <div class="form-group" style="margin-bottom:0"><label>종목명</label><input type="text" id="w-stock" class="w-add-input" placeholder="예: NVIDIA"></div>
+        <div class="form-group" style="margin-bottom:0"><label>종목명</label><input type="text" id="w-stock" class="w-add-input" placeholder="예: NVIDIA" style="color:#fff !important;border-color:rgba(255,255,255,.4) !important"></div>
         <div class="form-group" style="margin-bottom:0">
           <label>종목코드</label>
           <div style="display:flex;gap:4px">
-            <input type="text" id="w-ticker" class="w-add-input" placeholder="예: 005930 또는 005930.KS" style="flex:1"
+            <input type="text" id="w-ticker" class="w-add-input" placeholder="예: 005930 또는 005930.KS" style="flex:1;color:#fff !important;border-color:rgba(255,255,255,.4) !important"
                    onkeydown="if(event.key==='Enter'){event.preventDefault();searchWatchTicker()}">
             <button type="button" id="w-ticker-search-btn" class="btn btn-ghost btn-sm" onclick="searchWatchTicker()" title="키움 API에서 종목명 자동 조회">🔍 조회</button>
           </div>
