@@ -1539,6 +1539,7 @@ let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]'
 let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
 // 종목명 → Yahoo Finance 종목코드 매핑 (전 계좌 공유)
 let etfTickerMap    = JSON.parse(localStorage.getItem('sm-etf-tickers')  || '{}');
+let etfDividendData = {};  // { "441640": { dividendYield, annualDPS, lastDivDate, updatedAt } }
 let telegramSettings = JSON.parse(localStorage.getItem('sm-telegram') || '{}');
 let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
 
@@ -1582,8 +1583,10 @@ function switchTab(btn, name) {
   if (name === 'dividend')  renderDividend();
   if (name === 'etf') {
     const active = document.querySelector('#tab-etf .sub-tab-content.active');
-    renderEtfAcctTab(active ? active.id.replace('sub-etf-','') : 'nh1');
-    renderEtfAllSummary();
+    loadEtfDividendData().then(() => {
+      renderEtfAcctTab(active ? active.id.replace('sub-etf-','') : 'nh1');
+      renderEtfAllSummary();
+    });
   }
   if (name === 'etfmgmt')  renderEtfTradeTab();
   if (name === 'daytrade') renderDayTrade();
@@ -2990,16 +2993,20 @@ function renderEtfAcctTab(acctId) {
 
   const holdings = calcEtfH(acctId);
   const rows = Object.entries(holdings).filter(([,h]) => h.qty > 0.0001).map(([stock, h]) => {
-    const div  = divS[stock] || {};
-    const cur  = div.cur || h.avg;
-    const val  = h.qty * cur;
+    const div      = divS[stock] || {};
+    const autoCode = resolveTickerCode(stock);
+    const autoData = (autoCode && etfDividendData[autoCode]) || null;
+    const cur      = div.cur || h.avg;
+    const val      = h.qty * cur;
     const capitalGain  = val - h.qty * h.avg;
     const capitalPct   = h.avg ? (cur - h.avg) / h.avg * 100 : 0;
-    const annualDiv    = h.qty * (div.annualDPS || 0);
+    const dpsVal       = div.annualDPS || autoData?.annualDPS || 0;
+    const annualDiv    = h.qty * dpsVal;
     const annualDivNet = annualDiv * (1 - TAX_RATE);
-    const divYield     = cur ? (div.annualDPS || 0) / cur * 100 : 0;
+    const divYield     = cur && dpsVal ? dpsVal / cur * 100 : (autoData?.dividendYield || 0);
     const totalReturn  = h.qty * h.avg > 0 ? (capitalGain + annualDivNet) / (h.qty * h.avg) * 100 : 0;
-    return { stock, h, cur, val, capitalGain, capitalPct, annualDiv, annualDivNet, divYield, totalReturn };
+    const isAuto       = !div.annualDPS && !!autoData;
+    return { stock, h, cur, val, capitalGain, capitalPct, annualDiv, annualDivNet, divYield, totalReturn, autoData, isAuto, dpsVal };
   }).sort((a, b) => b.h.qty - a.h.qty);
 
   const totalInvest  = rows.reduce((s,r) => s + r.h.qty * r.h.avg, 0);
@@ -3009,25 +3016,28 @@ function renderEtfAcctTab(acctId) {
   const totalDivRecvd = acctId === 'nh1'
     ? dividends.filter(d => rows.some(r => r.stock === d.stock)).reduce((s,d) => s+(d.total||0), 0) : 0;
 
-  // 연간 배당
-  const annualRows = rows.filter(r => (divS[r.stock]?.annualDPS||0) > 0);
+  // 연간 배당 (수동 설정 or 자동 크롤링 DPS 있는 종목)
+  const annualRows = rows.filter(r => r.dpsVal > 0);
   let totalGrossAnn = 0, totalNetAnn = 0;
   const annualHTML = annualRows.length ? annualRows.map(r => {
-    const gross = r.h.qty * (divS[r.stock]?.annualDPS||0);
+    const gross = r.h.qty * r.dpsVal;
     const net   = gross * (1 - TAX_RATE);
-    const dy    = r.cur ? (divS[r.stock]?.annualDPS||0) / r.cur * 100 : 0;
+    const dy    = r.cur ? r.dpsVal / r.cur * 100 : 0;
     const mos   = (divS[r.stock]?.divMonths||[]).map(m=>m+'월').join(', ');
+    const dpsLabel = r.isAuto
+      ? `${fmtF(r.dpsVal,0)}원 <span style="font-size:10px;color:var(--muted)">(자동)</span>`
+      : `${fmtF(r.dpsVal,2)}원`;
     totalGrossAnn += gross; totalNetAnn += net;
     return `<tr>
       <td><strong>${r.stock}</strong></td>
       <td class="text-right">${fmt(r.h.qty)}주</td>
-      <td class="text-right text-yellow">${fmtF(divS[r.stock]?.annualDPS||0,2)}원</td>
+      <td class="text-right text-yellow">${dpsLabel}</td>
       <td class="text-right text-muted">${fmt(gross)}원</td>
       <td class="text-right text-yellow"><strong>${fmt(net)}원</strong></td>
       <td class="text-right ${dy>0?'text-yellow':'text-muted'}">${dy>0?fmtF(dy,2)+'%':'-'}</td>
-      <td class="text-muted">${mos||'미설정'}</td>
+      <td class="text-muted">${mos || (r.isAuto && r.autoData?.lastDivDate ? `최근 ${r.autoData.lastDivDate}` : '미설정')}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="7"><div class="empty">배당 설정을 입력하면 자동 계산됩니다.</div></td></tr>';
+  }).join('') : '<tr><td colspan="7"><div class="empty">배당 설정을 입력하거나 아래 자동 업데이트를 실행하세요.</div></td></tr>';
 
   // 매매 내역 (손익 포함)
   const jWithPL = computeJournalPL(acctId);
@@ -3064,6 +3074,7 @@ function renderEtfAcctTab(acctId) {
         <div class="card-title" style="margin:0">ETF 보유 현황</div>
         <div class="row-flex" style="gap:8px">
           <button id="etf-fetch-btn-${acctId}" class="btn btn-primary btn-sm no-print" onclick="fetchEtfPrices('${acctId}')">🔄 시세 가져오기</button>
+          <button id="etf-div-btn-${acctId}" class="btn btn-success btn-sm no-print" onclick="updateEtfDividends('${acctId}')">💰 배당수익률 자동 업데이트</button>
           <button class="btn btn-orange btn-sm no-print" onclick="exportEtfCSV('${acctId}')">📥 CSV</button>
         </div>
       </div>
@@ -3097,8 +3108,15 @@ function renderEtfAcctTab(acctId) {
             </td>
             <td class="text-right">${fmt(r.val)}원</td>
             <td class="text-right ${cc(r.capitalGain)}">${sign(r.capitalGain)}${fmt(r.capitalGain)}원 <span class="${cc(r.capitalPct)}" style="font-size:11px">(${sign(r.capitalPct)}${fmtF(r.capitalPct,2)}%)</span></td>
-            <td class="text-right text-yellow">${r.divYield>0?fmtF(r.divYield,2)+'%':'<span class="text-muted">미설정</span>'}</td>
-            <td class="text-right text-yellow">${r.annualDivNet>0?fmt(r.annualDivNet)+'원':'<span class="text-muted">-</span>'}</td>
+            <td class="text-right text-yellow">${r.divYield > 0
+              ? (r.isAuto
+                  ? `${fmtF(r.divYield,2)}% <span style="font-size:10px;color:var(--muted);background:rgba(128,128,128,.15);border-radius:3px;padding:1px 4px" title="ETFcheck 자동 (${r.autoData?.updatedAt||''})">자동</span>${r.autoData?.lastDivDate ? `<div style="font-size:10px;color:var(--muted)">배당락 ${r.autoData.lastDivDate}</div>` : ''}`
+                  : fmtF(r.divYield,2) + '%')
+              : '<span class="text-muted">미설정</span>'
+            }</td>
+            <td class="text-right text-yellow">${r.annualDivNet>0
+              ? fmt(r.annualDivNet)+'원'+(r.isAuto?` <span style="font-size:10px;color:var(--muted)">자동</span>`:'')
+              :'<span class="text-muted">-</span>'}</td>
             <td class="text-right ${cc(r.totalReturn)}">${r.totalReturn!==0?sign(r.totalReturn)+fmtF(r.totalReturn,2)+'%':'<span class="text-muted">-</span>'}</td>
           </tr>`).join('')
         : '<tr><td colspan="9"><div class="empty">ETF 매매 기록을 추가하면 자동으로 나타납니다.</div></td></tr>'}
@@ -3615,6 +3633,53 @@ function updateW2AlertBadge(watchId) {
 
 // ── 종목코드로 키움 API(ka10001) 조회 → 종목명 자동 입력 ──
 const KIWOOM_NGROK = 'https://stock-manager-hong.ngrok.app';
+
+// ── ETF 배당수익률 자동 로드 ──
+async function loadEtfDividendData() {
+  try {
+    const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+    const res = await fetch(`${base}/api/etf-dividend`);
+    if (res.ok) etfDividendData = await res.json();
+  } catch(e) {
+    console.warn('ETF 배당수익률 로드 실패:', e.message);
+  }
+}
+
+// ── ETF 배당수익률 자동 업데이트 (ETFcheck 크롤링) ──
+async function updateEtfDividends(acctId) {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  const holdings = calcEtfH(acctId);
+  const codes = [...new Set(
+    Object.keys(holdings)
+      .filter(stock => holdings[stock].qty > 0.0001 && /^\d{6}$/.test(etfTickerMap[stock] || ''))
+      .map(stock => etfTickerMap[stock])
+  )];
+
+  if (!codes.length) {
+    toast('종목코드가 등록된 ETF가 없습니다. 종목코드를 먼저 입력하세요.', 'red'); return;
+  }
+
+  const btn = document.getElementById(`etf-div-btn-${acctId}`);
+  if (btn) { btn.disabled = true; btn.textContent = `⏳ 조회 중... (${codes.length}개)`; }
+
+  try {
+    const res = await fetch(`${base}/api/etf-dividend/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codes })
+    });
+    if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+    const data = await res.json();
+    etfDividendData = await (await fetch(`${base}/api/etf-dividend`)).json();
+    renderEtfAcctTab(acctId);
+    const cnt = Object.keys(data.results || {}).length;
+    toast(`배당수익률 자동 업데이트 완료 (${cnt}/${codes.length}개)`, 'green');
+  } catch(e) {
+    toast(`배당수익률 업데이트 실패: ${e.message}`, 'red');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💰 배당수익률 자동 업데이트'; }
+  }
+}
 
 async function searchWatchTicker() {
   const tickerInput = document.getElementById('w-ticker');
@@ -5350,8 +5415,10 @@ renderWatchlist();
 buildAlertList();
 loadDailyMemo();
 renderDayTrade();
-renderEtfAcctTab('nh1');
-renderEtfAllSummary();
+loadEtfDividendData().then(() => {
+  renderEtfAcctTab('nh1');
+  renderEtfAllSummary();
+});
 setInterval(updateClock, 1000);
 updateClock();
 initJournalWatchDropdown();
