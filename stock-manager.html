@@ -184,16 +184,16 @@
     @media(max-width:600px) { .wc-actions .wc-label-btn { display:none; } }
     .wc-order-btns { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
     /* 가격 배지 */
-    .wc-badge { display:inline-flex; align-items:center; justify-content:space-between; gap:3px; min-width:80px; flex-shrink:0; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; box-sizing:border-box; }
-    .wc-bsig { font-size:9px; font-weight:800; flex-shrink:0; letter-spacing:-.2px; }
+    .wc-badge { display:inline-flex; align-items:center; justify-content:flex-start; gap:4px; width:134px; flex-shrink:0; border-radius:4px; padding:1px 6px; font-size:10px; font-weight:600; white-space:nowrap; cursor:pointer; border:1px solid transparent; transition:opacity .15s; box-sizing:border-box; }
+    .wc-bsig { font-size:9px; font-weight:800; flex-shrink:0; width:30px; text-align:right; letter-spacing:-.2px; }
     .wc-badge:hover { opacity:.75; }
     .wc-badge-green  { background:rgba(63,185,80,.15); color:var(--green); border-color:rgba(63,185,80,.3); }
     .wc-badge-blue   { background:rgba(88,166,255,.15); color:var(--blue);  border-color:rgba(88,166,255,.3); }
     .wc-badge-red    { background:rgba(248,81,73,.15);  color:var(--red);   border-color:rgba(248,81,73,.3); }
     .wc-badge-empty  { color:rgba(150,150,150,.4); border-color:rgba(255,255,255,.1); border-style:dashed; }
     .wc-badge-empty:hover { opacity:1; border-color:rgba(255,255,255,.3); color:var(--muted); }
-    .wc-bl { flex-shrink:0; opacity:.85; }
-    .wc-bv { text-align:right; font-variant-numeric:tabular-nums; flex:1; }
+    .wc-bl { flex-shrink:0; width:22px; opacity:.85; }
+    .wc-bv { flex-shrink:0; width:62px; text-align:right; font-variant-numeric:tabular-nums; }
     .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; flex:1; min-width:0; padding:0; text-align:right; }
     .wc-order-btn { background:none; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-size:9px; padding:1px 5px; cursor:pointer; line-height:1.3; transition:color .15s, border-color .15s; font-family:inherit; }
     .wc-order-btn:hover:not(:disabled) { color:var(--blue); border-color:var(--blue); }
@@ -4424,18 +4424,20 @@ function _syncAlertsToServer(w) {
 }
 
 function _badgeSig(field, val, price) {
-  if (!val || !price) return '';
+  if (!val || !price) return '';  // 빈 배지는 span 불필요 (flex:1이 bv를 채움)
+  let text = '', color = '';
   if (field === 'supportPrice') {
-    if (price < val)                    return '<span class="wc-bsig" style="color:var(--red)">🔴이탈</span>';
-    if ((price - val) / val * 100 <= 3) return '<span class="wc-bsig" style="color:var(--yellow)">⚠️근접</span>';
+    if (price < val)                    { text = '🔴이탈'; color = 'var(--red)'; }
+    else if ((price-val)/val*100 <= 3)  { text = '⚠️근접'; color = 'var(--yellow)'; }
   } else if (field === 'stopPrice') {
-    if (price < val)                    return '<span class="wc-bsig" style="color:var(--red)">🚨이탈</span>';
-    if ((price - val) / val * 100 <= 5) return '<span class="wc-bsig" style="color:var(--yellow)">⚠️근접</span>';
+    if (price < val)                    { text = '🚨이탈'; color = 'var(--red)'; }
+    else if ((price-val)/val*100 <= 5)  { text = '⚠️근접'; color = 'var(--yellow)'; }
   } else if (field === 'target') {
-    if (price >= val)                   return '<span class="wc-bsig" style="color:var(--green)">✅도달</span>';
-    if ((val - price) / val * 100 <= 5) return '<span class="wc-bsig" style="color:var(--blue)">📈근접</span>';
+    if (price >= val)                   { text = '✅도달'; color = 'var(--green)'; }
+    else if ((val-price)/val*100 <= 5)  { text = '📈근접'; color = 'var(--blue)'; }
   }
-  return '';
+  // 신호 없어도 span 유지 → 3열 고정 레이아웃 보장
+  return `<span class="wc-bsig"${color ? ` style="color:${color}"` : ''}>${text}</span>`;
 }
 
 function _badgeInner(label, val, field, price) {
