@@ -2843,16 +2843,20 @@ function renderEtfAcctTab(acctId) {
 
   const holdings = calcEtfH(acctId);
   const rows = Object.entries(holdings).filter(([,h]) => h.qty > 0.0001).map(([stock, h]) => {
-    const div  = divS[stock] || {};
-    const cur  = div.cur || h.avg;
-    const val  = h.qty * cur;
+    const div      = divS[stock] || {};
+    const autoCode = resolveTickerCode(stock);
+    const autoData = (autoCode && etfDividendData[autoCode]) || null;
+    const cur      = div.cur || h.avg;
+    const val      = h.qty * cur;
     const capitalGain  = val - h.qty * h.avg;
     const capitalPct   = h.avg ? (cur - h.avg) / h.avg * 100 : 0;
-    const annualDiv    = h.qty * (div.annualDPS || 0);
+    const dpsVal       = div.annualDPS || autoData?.annualDPS || 0;
+    const annualDiv    = h.qty * dpsVal;
     const annualDivNet = annualDiv * (1 - TAX_RATE);
-    const divYield     = cur ? (div.annualDPS || 0) / cur * 100 : 0;
+    const divYield     = cur && dpsVal ? dpsVal / cur * 100 : (autoData?.dividendYield || 0);
     const totalReturn  = h.qty * h.avg > 0 ? (capitalGain + annualDivNet) / (h.qty * h.avg) * 100 : 0;
-    return { stock, h, cur, val, capitalGain, capitalPct, annualDiv, annualDivNet, divYield, totalReturn };
+    const isAuto       = !div.annualDPS && !!autoData;
+    return { stock, h, cur, val, capitalGain, capitalPct, annualDiv, annualDivNet, divYield, totalReturn, autoData, isAuto, dpsVal };
   }).sort((a, b) => b.h.qty - a.h.qty);
 
   const totalInvest  = rows.reduce((s,r) => s + r.h.qty * r.h.avg, 0);
@@ -2862,25 +2866,29 @@ function renderEtfAcctTab(acctId) {
   const totalDivRecvd = acctId === 'nh1'
     ? dividends.filter(d => rows.some(r => r.stock === d.stock)).reduce((s,d) => s+(d.total||0), 0) : 0;
 
-  // 연간 배당
-  const annualRows = rows.filter(r => (divS[r.stock]?.annualDPS||0) > 0);
+  // 연간 배당 (수동 설정 or 자동 크롤링 DPS 있는 종목)
+  const annualRows = rows.filter(r => r.dpsVal > 0);
   let totalGrossAnn = 0, totalNetAnn = 0;
   const annualHTML = annualRows.length ? annualRows.map(r => {
-    const gross = r.h.qty * (divS[r.stock]?.annualDPS||0);
+    const dps   = r.dpsVal;
+    const gross = r.h.qty * dps;
     const net   = gross * (1 - TAX_RATE);
-    const dy    = r.cur ? (divS[r.stock]?.annualDPS||0) / r.cur * 100 : 0;
+    const dy    = r.cur ? dps / r.cur * 100 : 0;
     const mos   = (divS[r.stock]?.divMonths||[]).map(m=>m+'월').join(', ');
+    const dpsLabel = r.isAuto
+      ? `${fmtF(dps,0)}원 <span style="font-size:10px;color:var(--muted)">(자동)</span>`
+      : `${fmtF(dps,2)}원`;
     totalGrossAnn += gross; totalNetAnn += net;
     return `<tr>
       <td><strong>${r.stock}</strong></td>
       <td class="text-right">${fmt(r.h.qty)}주</td>
-      <td class="text-right text-yellow">${fmtF(divS[r.stock]?.annualDPS||0,2)}원</td>
+      <td class="text-right text-yellow">${dpsLabel}</td>
       <td class="text-right text-muted">${fmt(gross)}원</td>
       <td class="text-right text-yellow"><strong>${fmt(net)}원</strong></td>
       <td class="text-right ${dy>0?'text-yellow':'text-muted'}">${dy>0?fmtF(dy,2)+'%':'-'}</td>
-      <td class="text-muted">${mos||'미설정'}</td>
+      <td class="text-muted">${mos || (r.isAuto && r.autoData?.lastDivDate ? `최근 ${r.autoData.lastDivDate}` : '미설정')}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="7"><div class="empty">배당 설정을 입력하면 자동 계산됩니다.</div></td></tr>';
+  }).join('') : '<tr><td colspan="7"><div class="empty">배당 설정을 입력하거나 ETFcheck 자동 조회를 실행하세요.</div></td></tr>';
 
   // 매매 내역 (손익 포함)
   const jWithPL = computeJournalPL(acctId);
@@ -2950,14 +2958,15 @@ function renderEtfAcctTab(acctId) {
             </td>
             <td class="text-right">${fmt(r.val)}원</td>
             <td class="text-right ${cc(r.capitalGain)}">${sign(r.capitalGain)}${fmt(r.capitalGain)}원 <span class="${cc(r.capitalPct)}" style="font-size:11px">(${sign(r.capitalPct)}${fmtF(r.capitalPct,2)}%)</span></td>
-            <td class="text-right text-yellow">${(()=>{
-              if (r.divYield > 0) return fmtF(r.divYield, 2) + '%';
-              const autoCode = resolveTickerCode(r.stock);
-              const autoYld = autoCode && etfDividendData[autoCode]?.dividendYield;
-              if (autoYld) return `<span style="color:var(--muted)" title="자동 크롤링 (${etfDividendData[autoCode].updatedAt})">${fmtF(autoYld,2)}% <span style="font-size:10px">자동</span></span>`;
-              return '<span class="text-muted">미설정</span>';
-            })()}</td>
-            <td class="text-right text-yellow">${r.annualDivNet>0?fmt(r.annualDivNet)+'원':'<span class="text-muted">-</span>'}</td>
+            <td class="text-right text-yellow">${r.divYield > 0
+              ? (r.isAuto
+                ? `<span title="ETFcheck 자동 (${r.autoData?.updatedAt||''})">${fmtF(r.divYield,2)}% <span style="font-size:10px;color:var(--muted)">자동</span></span>${r.autoData?.lastDivDate ? `<div style="font-size:10px;color:var(--muted)">배당락 ${r.autoData.lastDivDate}</div>` : ''}`
+                : fmtF(r.divYield,2) + '%')
+              : '<span class="text-muted">미설정</span>'
+            }</td>
+            <td class="text-right text-yellow">${r.annualDivNet>0
+              ? fmt(r.annualDivNet)+'원'+(r.isAuto?'<span style="font-size:10px;color:var(--muted)"> 자동</span>':'')
+              :'<span class="text-muted">-</span>'}</td>
             <td class="text-right ${cc(r.totalReturn)}">${r.totalReturn!==0?sign(r.totalReturn)+fmtF(r.totalReturn,2)+'%':'<span class="text-muted">-</span>'}</td>
           </tr>`).join('')
         : '<tr><td colspan="9"><div class="empty">ETF 매매 기록을 추가하면 자동으로 나타납니다.</div></td></tr>'}
