@@ -4087,11 +4087,23 @@ function renderWatchlist() {
 
     const _d1 = w.trendH1Date, _d2 = w.trendH2Date, _p1 = parseFloat(w.trendH1Price);
     let trendBadge = '';
+    let trendDistBadge = '';
+    const _trendDistSpan = (pct) => {
+      const sign  = pct >= 0 ? '+' : '';
+      const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+      const bg    = pct >= 0 ? 'rgba(63,185,80,.12)' : 'rgba(248,81,73,.12)';
+      const bdr   = pct >= 0 ? 'rgba(63,185,80,.3)' : 'rgba(248,81,73,.3)';
+      return `<span class="badge trendline-badge" style="background:${bg};color:${color};border:1px solid ${bdr};font-size:10px;padding:2px 6px;flex-shrink:0;font-variant-numeric:tabular-nums" title="추세선까지 거리">${sign}${fmtF(pct,1)}%</span>`;
+    };
     if (_d1 && _d2) {
       // 케이스 A: 고점 2개 → 하락 추세선
       const tlPrice = calcTrendlinePrice(w);
-      if (tlPrice !== null && w.price && w.price > tlPrice)
-        trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="하락추세선 상향돌파 중">📈 돌파</span>`;
+      if (tlPrice !== null && w.price) {
+        const pct = (w.price - tlPrice) / tlPrice * 100;
+        if (w.price > tlPrice)
+          trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="하락추세선 상향돌파 중">📈 돌파</span>`;
+        trendDistBadge = _trendDistSpan(pct);
+      }
     } else if (_d1 && !_d2 && _p1 > 0 && w.price) {
       // 케이스 B: 고점1 날짜+가격만 → 수평 저항선 (날짜 포함)
       const resPct = (w.price - _p1) / _p1 * 100;
@@ -4099,6 +4111,7 @@ function renderWatchlist() {
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 돌파 중">🚀 저항선 돌파</span>`;
       else if (Math.abs(resPct) <= 3)
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(240,136,62,.2);color:var(--orange);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 근접">⚠️ 저항선 근접</span>`;
+      trendDistBadge = _trendDistSpan(resPct);
     } else if (!_d1 && !_d2 && _p1 > 0 && w.price) {
       // 케이스 C: 가격만 입력 (날짜 없음) → 수평 저항선
       const resPct = (w.price - _p1) / _p1 * 100;
@@ -4106,6 +4119,7 @@ function renderWatchlist() {
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 돌파 중">🚀 저항선 돌파</span>`;
       else if (Math.abs(resPct) <= 3)
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(240,136,62,.2);color:var(--orange);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 근접">⚠️ 저항선 근접</span>`;
+      trendDistBadge = _trendDistSpan(resPct);
     }
 
     const idx = watchlist.findIndex(x => x.id === w.id);
@@ -4151,7 +4165,7 @@ function renderWatchlist() {
               ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
             </div>
             <div class="wc-actions no-print" style="margin-left:auto">
-              ${trendBadge}${w2SigBadges}
+              ${trendBadge}${trendDistBadge}${w2SigBadges}
               <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
               <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
             </div>
@@ -4207,7 +4221,7 @@ function renderWatchlist() {
             ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
           </div>
           <div class="wc-actions no-print" style="margin-left:auto">
-            ${trendBadge}${w2SigBadges}
+            ${trendBadge}${trendDistBadge}${w2SigBadges}
             ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
             ${wGrp==='ready' ? `
               <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
