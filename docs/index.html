@@ -3792,7 +3792,6 @@ function deleteWatch(id) {
   watchlist = watchlist.filter(x => x.id !== id);
   save('watchlist', watchlist);
   renderWatchlist();
-  // alerts.json에서도 삭제
   if (w.ticker) {
     const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
     const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
