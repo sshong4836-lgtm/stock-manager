@@ -3792,6 +3792,15 @@ function deleteWatch(id) {
   watchlist = watchlist.filter(x => x.id !== id);
   save('watchlist', watchlist);
   renderWatchlist();
+  // alerts.json에서도 삭제
+  if (w.ticker) {
+    const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+    const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
+    fetch(`${base}/api/alerts/${code}`, {
+      method: 'DELETE',
+      headers: { 'ngrok-skip-browser-warning': '1' }
+    }).catch(e => console.warn('alerts 삭제 실패:', e.message));
+  }
 }
 
 async function fetchSingleWatchPrice(id) {
