@@ -6499,8 +6499,8 @@ function _mcRenderRows(items, tbodyId) {
       else if (diff < 0) rankBadge = `<span style="color:var(--red);font-size:11px;margin-left:4px">▼${Math.abs(diff)}</span>`;
     }
     if (s.isNew && s.rank <= 10) rankBadge = '<span class="mc-new-badge" style="margin-left:4px">신규</span>';
-    return `<tr>
-      <td class="mc-rank text-right">${rank}</td>
+    return `<tr${s.rank <= 10 ? ' style="background:rgba(255,255,255,0.03);border-left:2px solid var(--accent)"' : ''}>
+      <td class="mc-rank text-right" style="${s.rank <= 10 ? 'font-weight:600' : ''}">${rank}</td>
       <td><span style="font-weight:500">${name}</span>${newBadge}${rankBadge}</td>
       <td class="text-right">${price}</td>
       <td class="text-right">${rate}</td>
