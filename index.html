@@ -6492,9 +6492,16 @@ function _mcRenderRows(items, tbodyId) {
     const rate    = _mcFmtRate(s.flu_rt   || s.prdy_ctrt || s.ctrt);
     const cap     = _mcFmtCap(s.mrkt_cap  || s.stck_avls || s.avls);
     const newBadge = s.isNew ? '<span class="mc-new-badge">신규</span>' : '';
+    let rankBadge = '';
+    if (s.rank <= 10 && s.prevRank !== null && s.prevRank !== undefined) {
+      const diff = s.prevRank - s.rank;
+      if (diff > 0) rankBadge = `<span style="color:var(--green);font-size:11px;margin-left:4px">▲${diff}</span>`;
+      else if (diff < 0) rankBadge = `<span style="color:var(--red);font-size:11px;margin-left:4px">▼${Math.abs(diff)}</span>`;
+    }
+    if (s.isNew && s.rank <= 10) rankBadge = '<span class="mc-new-badge" style="margin-left:4px">신규</span>';
     return `<tr>
       <td class="mc-rank text-right">${rank}</td>
-      <td><span style="font-weight:500">${name}</span>${newBadge}</td>
+      <td><span style="font-weight:500">${name}</span>${newBadge}${rankBadge}</td>
       <td class="text-right">${price}</td>
       <td class="text-right">${rate}</td>
       <td class="mc-cap text-right">${cap}</td>
