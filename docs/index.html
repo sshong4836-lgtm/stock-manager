@@ -3597,10 +3597,85 @@ function moveWatchToHolding(id) {
 function confirmMoveToHolding(id) {
   const w = watchlist.find(x => x.id === id);
   if (!w) return;
-  if (!confirm(`${w.stock} 종목을 보유종목으로 이동하시겠습니까?`)) return;
+
+  const existing = document.getElementById('move-to-holding-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'move-to-holding-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+
+  const prefillAccount = w.account || '삼성';
+  const prefillPrice   = w.buyAmount || '';
+  const prefillQty     = w.buyQty    || '';
+  const prefillDate    = w.buyDate   || today();
+
+  overlay.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 24px;min-width:320px;max-width:440px;width:92%">
+      <div style="font-size:1.1rem;font-weight:700;margin-bottom:6px">매수확정</div>
+      <div style="color:var(--muted);font-size:.85rem;margin-bottom:20px">${w.stock} → 보유종목으로 이동</div>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px">
+        <div>
+          <div style="font-size:.8rem;color:var(--muted);margin-bottom:6px">계좌</div>
+          <div style="display:flex;gap:16px">
+            ${['삼성','키움','NH'].map(a => `
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.9rem">
+                <input type="radio" name="mth-account" value="${a}" ${prefillAccount===a?'checked':''} style="accent-color:var(--blue)">
+                ${a}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 14px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;color:var(--muted)">매수가 (원)</label>
+            <input id="mth-price" type="number" class="form-control" placeholder="0" min="0" value="${prefillPrice}">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;color:var(--muted)">수량 (주)</label>
+            <input id="mth-qty" type="number" class="form-control" placeholder="0" min="1" value="${prefillQty}">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <label style="font-size:.8rem;color:var(--muted)">매수일</label>
+            <input id="mth-date" type="date" class="form-control" value="${prefillDate}">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('move-to-holding-modal').remove()">취소</button>
+        <button class="btn btn-primary" onclick="saveMoveToHolding(${id})">저장</button>
+      </div>
+    </div>
+  `;
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('mth-price').focus(), 50);
+}
+
+function saveMoveToHolding(id) {
+  const w = watchlist.find(x => x.id === id);
+  if (!w) return;
+
+  const accountEl = document.querySelector('#move-to-holding-modal input[name="mth-account"]:checked');
+  const account = accountEl ? accountEl.value : '삼성';
+  const price   = parseFloat(document.getElementById('mth-price').value) || 0;
+  const qty     = parseFloat(document.getElementById('mth-qty').value)   || 0;
+  const date    = document.getElementById('mth-date').value || today();
+
+  if (!price || !qty) { toast('매수가와 수량을 입력하세요.', 'red'); return; }
+
+  journals.unshift({ id: Date.now(), date, stock: w.stock, account, type: 'buy', qty, price, fee: 0, memo: '매수확정' });
+  save('journals', journals);
+
   w.group = 'holding';
   save('watchlist', watchlist);
+
+  document.getElementById('move-to-holding-modal').remove();
   renderWatchlist();
+  renderJournal();
+  renderPortfolio();
+  updateStockDatalist();
   toast(`${w.stock}을(를) 보유종목으로 이동했습니다.`);
 }
 
