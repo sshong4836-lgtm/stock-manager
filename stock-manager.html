@@ -3906,10 +3906,14 @@ function renderWatchlist() {
   let list;
   if (_watchGroup === 'holding') {
     syncHoldingWatchlistWithPortfolio(_allPmRows);
-    list = _allPmRows.map(pm => {
-      const wItem = watchlist.find(w => normalizeGroup(w.group) === 'holding' && w.stock === pm.stock);
-      return wItem ? { ...wItem, _pm: pm } : null;
-    }).filter(Boolean);
+    const pmMap = new Map(_allPmRows.map(pm => [pm.stock, pm]));
+    list = watchlist
+      .filter(w => normalizeGroup(w.group) === 'holding')
+      .map(w => {
+        const pm = pmMap.get(w.stock);
+        return pm ? { ...w, _pm: pm } : null;
+      })
+      .filter(Boolean);
   } else {
     list = watchlist.filter(w => normalizeGroup(w.group) === _watchGroup);
   }
@@ -3932,7 +3936,7 @@ function renderWatchlist() {
   const holdingsPerAcct = {};
   WATCH_ACCTS.forEach(a => { holdingsPerAcct[a] = calcHoldingsFromJournal(a); });
 
-  container.innerHTML = list.map(w => {
+  container.innerHTML = list.map((w, listIdx) => {
     const sig  = w.signal || 'gray';
     const wGrp = normalizeGroup(w.group);
 
@@ -4205,9 +4209,8 @@ function renderWatchlist() {
       trendDistBadge = _trendDistSpan(resPct);
     }
 
-    const idx = watchlist.findIndex(x => x.id === w.id);
-    const isFirst = idx === 0;
-    const isLast  = idx === watchlist.length - 1;
+    const isFirst = listIdx === 0;
+    const isLast  = listIdx === list.length - 1;
 
     // ── 보유종목: 관찰카드 동일 레이아웃 ──
     if (wGrp === 'holding') {
@@ -4355,11 +4358,17 @@ function toggleWatchDetail(id) {
 
 // ── 순서 이동 (▲▼) ──
 function moveWatch(id, dir) {
-  const idx = watchlist.findIndex(x => x.id === id);
-  if (idx < 0) return;
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= watchlist.length) return;
-  [watchlist[idx], watchlist[newIdx]] = [watchlist[newIdx], watchlist[idx]];
+  const item = watchlist.find(x => x.id === id);
+  if (!item) return;
+  const norm = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
+  const grp = norm(item.group);
+  const grpItems = watchlist.filter(x => norm(x.group) === grp);
+  const grpIdx = grpItems.findIndex(x => x.id === id);
+  const newGrpIdx = grpIdx + dir;
+  if (newGrpIdx < 0 || newGrpIdx >= grpItems.length) return;
+  const gi1 = watchlist.indexOf(grpItems[grpIdx]);
+  const gi2 = watchlist.indexOf(grpItems[newGrpIdx]);
+  [watchlist[gi1], watchlist[gi2]] = [watchlist[gi2], watchlist[gi1]];
   save('watchlist', watchlist);
   renderWatchlist();
 }
