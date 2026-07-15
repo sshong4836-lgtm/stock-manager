@@ -6672,7 +6672,7 @@ async function loadNewsTab() {
   if (!wrap) return;
   wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px">로딩 중...</div>';
   try {
-    const res = await fetch(`${base}/api/news?limit=100${qs}`);
+    const res = await fetch(`${base}/api/news?limit=9999${qs}`);
     _newsAllData = await res.json();
     _renderNewsStockBar();
     _renderNewsCards();
