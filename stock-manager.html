@@ -79,6 +79,11 @@
     .stat-card { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:16px; }
     .stat-label { font-size:11px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.4px; }
     .stat-value { font-size:22px; font-weight:700; line-height:1.2; }
+    #home-indices { grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:0; }
+    #home-indices .stat-card { padding:9px 8px; }
+    #home-indices .stat-label { font-size:9px; margin-bottom:3px; }
+    #home-indices .stat-value { font-size:14px; }
+    @media(max-width:640px){ #home-indices { grid-template-columns:repeat(2,1fr); } }
 
     /* ── Form ── */
     .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:12px; }
@@ -501,7 +506,7 @@
 <div id="tab-home" class="tab-content active">
   <div class="two-col">
     <div class="card">
-      <div class="card-title">☁️ 서울 날씨</div>
+      <div class="card-title">☁️ 날씨</div>
       <div id="home-weather" class="text-muted">불러오는 중...</div>
     </div>
     <div class="card">
@@ -1624,6 +1629,22 @@ function loadHomeTab() {
   loadHomeDart();
 }
 
+function homeWeatherRow(cityLabel, d) {
+  if (!d) return `<div class="text-red" style="font-size:12px;padding:6px 0">${cityLabel} 날씨 로드 실패</div>`;
+  return `
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+      <div style="font-size:26px;line-height:1;width:32px;text-align:center;flex-shrink:0">${d.weatherIcon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;color:var(--muted)">${cityLabel}</div>
+        <div style="font-size:16px;font-weight:700">${d.tempC}°C <span style="font-size:11px;color:var(--muted);font-weight:400">체감 ${d.feelsLikeC}°C</span></div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:var(--muted);line-height:1.5;flex-shrink:0">
+        <div>${d.weatherDesc} · 습도${d.humidity}% · 바람${d.windKmph}km/h</div>
+        <div>최고 ${d.maxTempC}° / 최저 ${d.minTempC}°</div>
+      </div>
+    </div>`;
+}
+
 async function loadHomeWeather() {
   const el = document.getElementById('home-weather');
   if (!el) return;
@@ -1631,15 +1652,10 @@ async function loadHomeWeather() {
     const res = await fetch(`${homeApiBase()}/api/home/weather`);
     const d = await res.json();
     if (d.error) throw new Error(d.error);
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:16px">
-        <div style="font-size:48px;line-height:1">${d.weatherIcon}</div>
-        <div>
-          <div style="font-size:28px;font-weight:700">${d.tempC}°C <span style="font-size:13px;color:var(--muted);font-weight:400">체감 ${d.feelsLikeC}°C</span></div>
-          <div style="font-size:13px;color:var(--muted);margin-top:2px">${d.weatherDesc} · 습도 ${d.humidity}% · 바람 ${d.windKmph}km/h</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">최고 ${d.maxTempC}° / 최저 ${d.minTempC}°</div>
-        </div>
-      </div>`;
+    el.innerHTML =
+      homeWeatherRow('서울', d.seoul) +
+      '<div style="border-top:1px solid var(--border);margin:2px 0"></div>' +
+      homeWeatherRow('제주', d.jeju);
   } catch(e) {
     el.innerHTML = `<span class="text-red">날씨 로드 실패: ${e.message}</span>`;
   }
@@ -1658,7 +1674,7 @@ function homeIdxCard(label, idx, unit, decimals) {
     <div class="stat-card">
       <div class="stat-label">${label}</div>
       <div class="stat-value">${fmtIdxNum(idx.price, decimals)}${unit}</div>
-      <div class="${cls}" style="font-size:12px;margin-top:4px;font-weight:600">${arrow} ${fmtIdxNum(Math.abs(idx.change), decimals)} (${ratioTxt})</div>
+      <div class="${cls}" style="font-size:10px;margin-top:3px;font-weight:600">${arrow} ${ratioTxt}</div>
     </div>`;
 }
 
@@ -1673,7 +1689,11 @@ async function loadHomeIndices() {
       homeIdxCard('KOSPI', d.kospi, '', 2) +
       homeIdxCard('KOSDAQ', d.kosdaq, '', 2) +
       homeIdxCard('USD/KRW', d.usdkrw, '원', 2) +
-      homeIdxCard('VIX', d.vix, '', 2);
+      homeIdxCard('VIX', d.vix, '', 2) +
+      homeIdxCard('S&P500', d.sp500, '', 2) +
+      homeIdxCard('NASDAQ', d.nasdaq, '', 2) +
+      homeIdxCard('나스닥 선물', d.nasdaqFutures, '', 2) +
+      homeIdxCard('브렌트유', d.brent, '', 2);
   } catch(e) {
     el.innerHTML = `<div class="stat-card"><div class="stat-label">오류</div><div class="stat-value text-red" style="font-size:13px">${e.message}</div></div>`;
   }
