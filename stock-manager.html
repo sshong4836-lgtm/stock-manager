@@ -475,7 +475,8 @@
 
 <!-- ═══════════ TABS ═══════════ -->
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab(this,'watchlist')">👀 관심종목</button>
+  <button class="tab-btn active" onclick="switchTab(this,'home')">🏠 홈</button>
+  <button class="tab-btn"        onclick="switchTab(this,'watchlist')">👀 관심종목</button>
   <button class="tab-btn"        onclick="switchTab(this,'news');loadNewsTab()">📰 종목뉴스</button>
   <button class="tab-btn"        onclick="switchTab(this,'journal')">📓 매매일지</button>
   <button class="tab-btn"        onclick="switchTab(this,'portfolio')">💼 포트폴리오</button>
@@ -493,6 +494,36 @@
 </div>
 
 <div class="content">
+
+<!-- ══════════════════════════════
+     TAB 0 : 홈
+══════════════════════════════ -->
+<div id="tab-home" class="tab-content active">
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">☁️ 서울 날씨</div>
+      <div id="home-weather" class="text-muted">불러오는 중...</div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 증시지표</div>
+      <div class="stats-grid" id="home-indices">
+        <div class="stat-card"><div class="stat-label">불러오는 중</div><div class="stat-value text-muted">-</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 관심종목·보유종목 최신 공시 (DART)</div>
+    <div id="home-dart-meta" class="text-muted" style="font-size:11px;margin-bottom:10px"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>공시일</th><th>종목</th><th>보고서명</th><th>제출인</th></tr>
+        </thead>
+        <tbody id="home-dart-body"><tr><td colspan="4" class="text-muted">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════
      TAB : 종목뉴스
@@ -985,7 +1016,7 @@
 <!-- ══════════════════════════════
      TAB 7 : 관심종목
 ══════════════════════════════ -->
-<div id="tab-watchlist" class="tab-content active">
+<div id="tab-watchlist" class="tab-content">
   <div class="card" style="padding-bottom:14px">
     <div class="card-title" onclick="toggleWatchAddForm()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
       관심종목 추가 <span id="w-add-arrow" style="font-size:10px;opacity:.7">▲</span>
@@ -1562,6 +1593,7 @@ function switchTab(btn, name) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
+  if (name === 'home')      loadHomeTab();
   if (name === 'stats')     setTimeout(renderStats, 0);
   if (name === 'dividend')  renderDividend();
   if (name === 'etf') {
@@ -1577,6 +1609,99 @@ function switchTab(btn, name) {
   if (name === 'etfwatch') renderEtfWatch();
   if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); }
   if (name === 'news')     loadNewsTab();
+}
+
+// ══════════════════════════════
+//   홈 탭 : 날씨 / 증시지표 / DART 공시
+// ══════════════════════════════
+function homeApiBase() {
+  return (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+}
+
+function loadHomeTab() {
+  loadHomeWeather();
+  loadHomeIndices();
+  loadHomeDart();
+}
+
+async function loadHomeWeather() {
+  const el = document.getElementById('home-weather');
+  if (!el) return;
+  try {
+    const res = await fetch(`${homeApiBase()}/api/home/weather`);
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="font-size:48px;line-height:1">${d.weatherIcon}</div>
+        <div>
+          <div style="font-size:28px;font-weight:700">${d.tempC}°C <span style="font-size:13px;color:var(--muted);font-weight:400">체감 ${d.feelsLikeC}°C</span></div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px">${d.weatherDesc} · 습도 ${d.humidity}% · 바람 ${d.windKmph}km/h</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">최고 ${d.maxTempC}° / 최저 ${d.minTempC}°</div>
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<span class="text-red">날씨 로드 실패: ${e.message}</span>`;
+  }
+}
+
+function fmtIdxNum(v, decimals) {
+  return Number(v).toLocaleString('ko-KR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function homeIdxCard(label, idx, unit, decimals) {
+  if (!idx) return `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value text-muted">-</div></div>`;
+  const cls   = idx.change > 0 ? 'text-red' : idx.change < 0 ? 'text-green' : 'text-muted';
+  const arrow = idx.change > 0 ? '▲' : idx.change < 0 ? '▼' : '-';
+  const ratioTxt = (idx.changeRatio > 0 ? '+' : '') + fmtIdxNum(idx.changeRatio, 2) + '%';
+  return `
+    <div class="stat-card">
+      <div class="stat-label">${label}</div>
+      <div class="stat-value">${fmtIdxNum(idx.price, decimals)}${unit}</div>
+      <div class="${cls}" style="font-size:12px;margin-top:4px;font-weight:600">${arrow} ${fmtIdxNum(Math.abs(idx.change), decimals)} (${ratioTxt})</div>
+    </div>`;
+}
+
+async function loadHomeIndices() {
+  const el = document.getElementById('home-indices');
+  if (!el) return;
+  try {
+    const res = await fetch(`${homeApiBase()}/api/home/indices`);
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    el.innerHTML =
+      homeIdxCard('KOSPI', d.kospi, '', 2) +
+      homeIdxCard('KOSDAQ', d.kosdaq, '', 2) +
+      homeIdxCard('USD/KRW', d.usdkrw, '원', 2) +
+      homeIdxCard('VIX', d.vix, '', 2);
+  } catch(e) {
+    el.innerHTML = `<div class="stat-card"><div class="stat-label">오류</div><div class="stat-value text-red" style="font-size:13px">${e.message}</div></div>`;
+  }
+}
+
+async function loadHomeDart() {
+  const body = document.getElementById('home-dart-body');
+  const meta = document.getElementById('home-dart-meta');
+  if (!body) return;
+  try {
+    const res = await fetch(`${homeApiBase()}/api/dart/watchlist-disclosures`);
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    if (meta) meta.textContent = `관심·보유 ${d.totalWatchCount}종목 중 ${d.mappedCount}종목 DART 매핑됨 · ${new Date(d.updatedAt).toLocaleTimeString('ko-KR')} 기준`;
+    if (!d.items.length) {
+      body.innerHTML = `<tr><td colspan="4" class="text-muted">최근 30일간 신규 공시가 없습니다.</td></tr>`;
+      return;
+    }
+    body.innerHTML = d.items.map(it => `
+      <tr>
+        <td class="text-muted" style="white-space:nowrap">${it.rcept_dt.slice(0,4)}-${it.rcept_dt.slice(4,6)}-${it.rcept_dt.slice(6,8)}</td>
+        <td>${it.corp_name} <span class="text-muted" style="font-size:11px">${it.stock_code}</span></td>
+        <td><a href="${it.url}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${it.report_nm}</a></td>
+        <td class="text-muted">${it.flr_nm || ''}</td>
+      </tr>`).join('');
+  } catch(e) {
+    body.innerHTML = `<tr><td colspan="4" class="text-red">공시 로드 실패: ${e.message}</td></tr>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -6527,6 +6652,9 @@ setTimeout(() => {
     setTimeout(syncSubscribedCodes, 2000);
   }
 }, 1000);
+
+// 페이지 로드 시 홈 탭(날씨/증시지표/DART 공시) 초기 로드
+setTimeout(loadHomeTab, 500);
 
 // ══════════════════════════════════════════════════════
 // 시총순위 탭
