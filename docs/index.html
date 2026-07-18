@@ -1726,14 +1726,14 @@ async function loadHomeDart() {
     if (d.error) throw new Error(d.error);
     if (meta) meta.textContent = `관심·보유 ${d.totalWatchCount}종목 중 ${d.mappedCount}종목 DART 매핑됨 · ${new Date(d.updatedAt).toLocaleTimeString('ko-KR')} 기준`;
     if (!d.items.length) {
-      body.innerHTML = `<tr><td colspan="4" class="text-muted">최근 30일간 신규 공시가 없습니다.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="4" class="text-muted">최근 30일간 표시 대상 공시가 없습니다.</td></tr>`;
       return;
     }
     body.innerHTML = d.items.map(it => `
       <tr>
         <td class="text-muted" style="white-space:nowrap">${it.rcept_dt.slice(0,4)}-${it.rcept_dt.slice(4,6)}-${it.rcept_dt.slice(6,8)}</td>
         <td>${it.corp_name} <span class="text-muted" style="font-size:11px">${it.stock_code}</span></td>
-        <td><a href="${it.url}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${it.report_nm}</a></td>
+        <td><a href="${it.url}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${it.badge ? it.badge + ' ' : ''}${it.report_nm}</a></td>
         <td class="text-muted">${it.flr_nm || ''}</td>
       </tr>`).join('');
   } catch(e) {
