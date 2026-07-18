@@ -1633,38 +1633,32 @@ function loadHomeTab() {
   loadHomeDart();
 }
 
-function homeWeatherRow(cityLabel, d) {
-  if (!d) return `<div class="text-red" style="font-size:13px;padding:8px 0">${cityLabel} 날씨 로드 실패</div>`;
+function homeWeatherMiniCell(label, icon, sub) {
   return `
-    <div style="display:flex;align-items:center;gap:14px;padding:9px 0">
-      <div style="font-size:38px;line-height:1;width:46px;text-align:center;flex-shrink:0">${d.weatherIcon}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:14px">${cityLabel}</div>
-        <div style="font-size:26px;font-weight:700">${d.tempC}°C <span style="font-size:14px;font-weight:400">체감 ${d.feelsLikeC}°C</span></div>
-      </div>
-      <div style="text-align:right;font-size:13px;line-height:1.6;flex-shrink:0">
-        <div>${d.weatherDesc} · 습도${d.humidity}% · 바람${d.windKmph}km/h</div>
-        <div>최고 ${d.maxTempC}° / 최저 ${d.minTempC}°</div>
-      </div>
+    <div style="text-align:center;flex-shrink:0">
+      <div style="font-size:10px;white-space:nowrap">${label}</div>
+      <div style="font-size:22px;line-height:1.25">${icon}</div>
+      <div style="font-size:11px;font-weight:700;white-space:nowrap">${sub}</div>
     </div>`;
 }
 
-function homeForecastRow(d) {
-  if (!d || !d.hourlyForecast || !d.hourlyForecast.length || !d.tomorrow) return '';
-  const cell = (label, icon, sub) => `
-    <div style="text-align:center;flex:1">
-      <div style="font-size:12px">${label}</div>
-      <div style="font-size:30px;line-height:1.3">${icon}</div>
-      <div style="font-size:13px;font-weight:700">${sub}</div>
-    </div>`;
-  const hrs = d.hourlyForecast.map(h => cell(`${h.offsetHours}시간후`, h.weatherIcon, `${h.tempC}°`)).join('');
-  const tmw = cell('내일', d.tomorrow.weatherIcon, `${d.tomorrow.maxTempC}° / ${d.tomorrow.minTempC}°`);
-  return `
-    <div style="border-top:1px solid var(--border);margin:2px 0"></div>
-    <div style="display:flex;align-items:center;gap:4px;padding:9px 0">
-      ${hrs}
+function homeWeatherRow(cityLabel, d) {
+  if (!d) return `<div class="text-red" style="font-size:13px;padding:8px 0">${cityLabel} 날씨 로드 실패</div>`;
+  const extra = (d.forecast3h && d.tomorrow) ? `
       <div style="width:1px;align-self:stretch;background:var(--border);flex-shrink:0"></div>
-      ${tmw}
+      ${homeWeatherMiniCell('3시간후', d.forecast3h.weatherIcon, `${d.forecast3h.tempC}°`)}
+      ${homeWeatherMiniCell('내일', d.tomorrow.weatherIcon, `${d.tomorrow.maxTempC}°/${d.tomorrow.minTempC}°`)}` : '';
+  return `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0">
+      <div style="font-size:38px;line-height:1;width:46px;text-align:center;flex-shrink:0">${d.weatherIcon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px">${cityLabel}</div>
+        <div style="font-size:26px;font-weight:700;white-space:nowrap">${d.tempC}°C <span style="font-size:14px;font-weight:400">체감 ${d.feelsLikeC}°C</span></div>
+      </div>
+      <div style="text-align:right;font-size:12px;line-height:1.6;flex-shrink:0;white-space:nowrap">
+        <div>${d.weatherDesc} · 습도${d.humidity}% · 바람${d.windKmph}km/h</div>
+        <div>최고 ${d.maxTempC}° / 최저 ${d.minTempC}°</div>
+      </div>${extra}
     </div>`;
 }
 
@@ -1678,8 +1672,7 @@ async function loadHomeWeather() {
     el.innerHTML =
       homeWeatherRow('서울', d.seoul) +
       '<div style="border-top:1px solid var(--border);margin:2px 0"></div>' +
-      homeWeatherRow('제주', d.jeju) +
-      homeForecastRow(d.seoul);
+      homeWeatherRow('제주', d.jeju);
   } catch(e) {
     el.innerHTML = `<span class="text-red">날씨 로드 실패: ${e.message}</span>`;
   }
