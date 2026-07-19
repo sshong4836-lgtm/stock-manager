@@ -532,6 +532,21 @@
       </table>
     </div>
   </div>
+  <div class="card">
+    <div class="card-title">🗓️ 이벤트 타임라인</div>
+    <div id="home-pipeline-meta" class="text-muted" style="font-size:11px;margin-bottom:10px"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>공시일</th><th>종목</th><th>카테고리</th><th>공시제목</th><th>직전가</th><th>30분후</th><th>종목수익률</th><th>KOSPI수익률</th><th>alpha</th></tr>
+        </thead>
+        <tbody id="home-pipeline-body"><tr><td colspan="9" class="text-muted">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-sm" id="home-pipeline-more-btn" onclick="loadMorePipelineEvents()" style="display:none">더보기</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════
@@ -1631,6 +1646,7 @@ function loadHomeTab() {
   loadHomeWeather();
   loadHomeIndices();
   loadHomeDart();
+  loadHomePipeline();
 }
 
 function homeWeatherMiniCell(label, icon, sub) {
@@ -1739,6 +1755,56 @@ async function loadHomeDart() {
   } catch(e) {
     body.innerHTML = `<tr><td colspan="4" class="text-red">공시 로드 실패: ${e.message}</td></tr>`;
   }
+}
+
+let pipelineEventsAll = [];
+let pipelineEventsShown = 10;
+
+async function loadHomePipeline() {
+  const body = document.getElementById('home-pipeline-body');
+  const meta = document.getElementById('home-pipeline-meta');
+  if (!body) return;
+  try {
+    const res = await fetch(`${homeApiBase()}/api/pipeline/events`);
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    pipelineEventsAll = d.items || [];
+    pipelineEventsShown = 10;
+    if (meta) meta.textContent = `총 ${pipelineEventsAll.length}건 · ${new Date(d.updatedAt).toLocaleTimeString('ko-KR')} 기준`;
+    renderPipelineEvents();
+  } catch(e) {
+    body.innerHTML = `<tr><td colspan="9" class="text-red">이벤트 로드 실패: ${e.message}</td></tr>`;
+  }
+}
+
+function renderPipelineEvents() {
+  const body = document.getElementById('home-pipeline-body');
+  const moreBtn = document.getElementById('home-pipeline-more-btn');
+  if (!body) return;
+  if (!pipelineEventsAll.length) {
+    body.innerHTML = `<tr><td colspan="9" class="text-muted">기록된 이벤트가 없습니다.</td></tr>`;
+    if (moreBtn) moreBtn.style.display = 'none';
+    return;
+  }
+  const pctTxt = v => (v === null || v === undefined) ? '계산중' : (v > 0 ? '+' : '') + fmtF(v, 2) + '%';
+  body.innerHTML = pipelineEventsAll.slice(0, pipelineEventsShown).map(it => `
+    <tr>
+      <td class="text-muted" style="white-space:nowrap">${(it.disclosed_at || '').slice(0, 10)}</td>
+      <td>${it.stock_name} <span class="text-muted" style="font-size:11px">${it.stock_code}</span></td>
+      <td style="white-space:nowrap">${it.badge ? it.badge + ' ' : ''}${it.category || ''}</td>
+      <td>${it.title}</td>
+      <td class="text-muted">${it.price_before != null ? fmt(it.price_before) : '-'}</td>
+      <td class="text-muted">${it.price_after_30m != null ? fmt(it.price_after_30m) : '계산중'}</td>
+      <td>${pctTxt(it.stock_return_pct)}</td>
+      <td class="text-muted">${pctTxt(it.kospi_return_pct)}</td>
+      <td class="${cc(it.alpha)}" style="font-weight:700">${it.alpha == null ? '계산중' : (it.alpha > 0 ? '+' : '') + fmtF(it.alpha, 2) + '%p'}</td>
+    </tr>`).join('');
+  if (moreBtn) moreBtn.style.display = pipelineEventsShown < pipelineEventsAll.length ? 'inline-block' : 'none';
+}
+
+function loadMorePipelineEvents() {
+  pipelineEventsShown += 10;
+  renderPipelineEvents();
 }
 
 // ══════════════════════════════════════════════════════
