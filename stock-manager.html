@@ -520,31 +520,37 @@
       </div>
     </div>
   </div>
-  <div class="card">
-    <div class="card-title">📋 관심종목·보유종목 최신 공시 (DART)</div>
-    <div id="home-dart-meta" class="text-muted" style="font-size:11px;margin-bottom:10px"></div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>공시일</th><th>종목</th><th>보고서명</th><th>제출인</th></tr>
-        </thead>
-        <tbody id="home-dart-body"><tr><td colspan="4" class="text-muted">불러오는 중...</td></tr></tbody>
-      </table>
+  <div class="card" id="home-dart-pipeline-card">
+    <div class="sub-tabs" style="margin-bottom:14px">
+      <button class="sub-tab-btn active" onclick="switchHomeSubTab(this,'dart')">📋 최신 공시</button>
+      <button class="sub-tab-btn" onclick="switchHomeSubTab(this,'pipeline')">🗓️ 이벤트 타임라인</button>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-title">🗓️ 이벤트 타임라인</div>
-    <div id="home-pipeline-meta" class="text-muted" style="font-size:11px;margin-bottom:10px"></div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>공시일</th><th>종목</th><th>카테고리</th><th>공시제목</th><th>직전가</th><th>30분후</th><th>종목수익률</th><th>KOSPI수익률</th><th>alpha</th></tr>
-        </thead>
-        <tbody id="home-pipeline-body"><tr><td colspan="9" class="text-muted">불러오는 중...</td></tr></tbody>
-      </table>
+
+    <div id="home-sub-dart" class="sub-tab-content active">
+      <div id="home-dart-meta" class="text-muted" style="font-size:11px;margin-bottom:10px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>공시일</th><th>종목</th><th>보고서명</th><th>제출인</th></tr>
+          </thead>
+          <tbody id="home-dart-body"><tr><td colspan="4" class="text-muted">불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
     </div>
-    <div style="text-align:center;margin-top:10px">
-      <button class="btn btn-sm" id="home-pipeline-more-btn" onclick="loadMorePipelineEvents()" style="display:none">더보기</button>
+
+    <div id="home-sub-pipeline" class="sub-tab-content">
+      <div id="home-pipeline-meta" class="text-muted" style="font-size:11px;margin-bottom:10px"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>공시일</th><th>종목</th><th>카테고리</th><th>공시제목</th><th>직전가</th><th>30분후</th><th>종목수익률</th><th>KOSPI수익률</th><th>alpha</th></tr>
+          </thead>
+          <tbody id="home-pipeline-body"><tr><td colspan="9" class="text-muted">불러오는 중...</td></tr></tbody>
+        </table>
+      </div>
+      <div style="text-align:center;margin-top:10px">
+        <button class="btn btn-sm" id="home-pipeline-more-btn" onclick="loadMorePipelineEvents()" style="display:none">더보기</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1647,6 +1653,13 @@ function loadHomeTab() {
   loadHomeIndices();
   loadHomeDart();
   loadHomePipeline();
+}
+
+function switchHomeSubTab(btn, name) {
+  document.querySelectorAll('#home-dart-pipeline-card .sub-tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('#home-dart-pipeline-card .sub-tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('home-sub-' + name).classList.add('active');
+  btn.classList.add('active');
 }
 
 function homeWeatherMiniCell(label, icon, sub) {
