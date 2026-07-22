@@ -1210,7 +1210,7 @@
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ft-image-input').click()">📷 캡처 이미지로 추가</button>
       </div>
     </div>
-    <div class="info-note">주간 선물 상단·하단 예상값을 입력합니다. 실제 종가는 나중에 수정 입력할 수 있습니다.</div>
+    <div class="info-note">주간 선물 상단·하단 예상값을 입력합니다. 실제 종가는 나중에 수정 입력할 수 있습니다.<br>캡처(Win+Shift+S) 후 파일 저장 없이 이 화면에서 <strong>Ctrl+V</strong>로 바로 붙여넣어도 분석됩니다.</div>
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:end;gap:10px">
       <div class="form-group"><label>날짜</label><input type="date" id="ft-date"></div>
       <div class="form-group"><label>선물 상단값</label><input type="number" id="ft-upper" placeholder="예: 390.5" step="0.01"></div>
@@ -1229,6 +1229,7 @@
         <button class="btn btn-ghost btn-sm" onclick="cancelFtImagePreview()">취소</button>
       </div>
     </div>
+    <div class="info-note" id="ft-image-refs-note" style="margin-bottom:12px"></div>
     <div class="table-wrap">
       <table>
         <thead><tr>
@@ -1270,8 +1271,11 @@
     <!-- 코스피 환산 -->
     <div>
       <div class="card">
-        <div class="card-title">코스피 환산 (최근 데이터 기준)</div>
-        <div class="info-note" style="margin-bottom:14px">선물 1포인트 ≈ 코스피 6.7포인트 기준</div>
+        <div class="section-header">
+          <div class="card-title" style="margin:0">코스피 환산 (최근 데이터 기준)</div>
+          <button class="btn btn-ghost btn-sm" onclick="recalcFtRatio()" title="누적된 참고선 데이터로 배율을 재산정합니다">🔄 배율 재계산</button>
+        </div>
+        <div class="info-note" id="ft-ratio-note" style="margin-bottom:14px">배율: 이미지 실측치 없으면 고정값 6.43 사용</div>
         <div id="ft-kospi-wrap">
           <div class="empty" style="padding:20px">데이터를 추가하면 표시됩니다.</div>
         </div>
@@ -5549,7 +5553,7 @@ function showPriceResultModal(successList, fail, krw = false) {
 // ══════════════════════════════════════════════════════
 // 선물동향
 // ══════════════════════════════════════════════════════
-const FUTURES_TO_KOSPI = 6.7;
+const FUTURES_TO_KOSPI = 6.43; // 실측 배율(weekly_ratio)이 없을 때만 쓰는 폴백값
 let futuresChart = null;
 function futuresApiBase() { return homeApiBase(); }
 
@@ -5654,7 +5658,10 @@ async function renderFutures() {
     const res = await fetch(`${futuresApiBase()}/api/futures`);
     if (!res.ok) throw new Error(`서버 오류(${res.status})`);
     const rows = await res.json();
-    futuresData = rows.map(r => ({ id: r.id, date: r.date, upper: r.upper, lower: r.lower, close: r.close_price }));
+    futuresData = rows.map(r => ({
+      id: r.id, date: r.date, upper: r.upper, lower: r.lower, close: r.close_price,
+      weeklyRatio: r.weekly_ratio ?? null, ratioSource: r.ratio_source ?? null,
+    }));
   } catch (e) {
     toast(`선물 데이터 로드 실패: ${e.message}`, 'red');
   }
@@ -5759,15 +5766,22 @@ function renderFuturesUI() {
 
   // ── 코스피 환산 (최근 데이터 기준) ──
   const kospiWrap = document.getElementById('ft-kospi-wrap');
+  const ratioNote = document.getElementById('ft-ratio-note');
   if (!sorted.length) {
     kospiWrap.innerHTML = '<div class="empty" style="padding:20px">데이터를 추가하면 표시됩니다.</div>';
+    ratioNote.textContent = '배율: 이미지 실측치 없으면 고정값 6.43 사용';
   } else {
     const latest = sorted[sorted.length - 1];
-    const kUpper = (latest.upper * FUTURES_TO_KOSPI).toFixed(0);
-    const kLower = (latest.lower * FUTURES_TO_KOSPI).toFixed(0);
-    const kClose = latest.close !== null ? (latest.close * FUTURES_TO_KOSPI).toFixed(0) : null;
-    const kMid   = ((latest.upper + latest.lower) / 2 * FUTURES_TO_KOSPI).toFixed(0);
-    const kRange = ((latest.upper - latest.lower) * FUTURES_TO_KOSPI).toFixed(0);
+    const ratio = latest.weeklyRatio ?? FUTURES_TO_KOSPI;
+    const ratioLabel = latest.weeklyRatio == null ? '고정값'
+      : latest.ratioSource === 'regression' ? '누적 재계산값'
+      : '이미지 실측값';
+    ratioNote.textContent = `배율: ${ratio.toFixed(4)} (${ratioLabel})`;
+    const kUpper = (latest.upper * ratio).toFixed(0);
+    const kLower = (latest.lower * ratio).toFixed(0);
+    const kClose = latest.close !== null ? (latest.close * ratio).toFixed(0) : null;
+    const kMid   = ((latest.upper + latest.lower) / 2 * ratio).toFixed(0);
+    const kRange = ((latest.upper - latest.lower) * ratio).toFixed(0);
     kospiWrap.innerHTML = `
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px">기준일: <strong style="color:var(--text)">${latest.date}</strong></div>
       <div style="display:flex;flex-direction:column;gap:8px">
@@ -5843,22 +5857,43 @@ function renderFuturesUI() {
 
 // ── 선물동향: 캡처 이미지 자동인식 ──
 let ftImagePreview = []; // [{date, upper, lower}]
+let ftImageRefs = [];    // [{futures, kospi}] 이미지에서 인식된 코스피 참고선
+let ftImageRatio = null; // 참고선으로 계산한 이번 주 실측 배율
+let ftImageRatioSource = null; // 'image_measured' | null
+
+function readImageFileAndAnalyze(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = reader.result; // "data:image/png;base64,...."
+    const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+    if (!m) { toast('이미지를 읽을 수 없습니다.', 'red'); return; }
+    await analyzeFtImage(m[2], m[1]);
+  };
+  reader.onerror = () => toast('이미지를 읽을 수 없습니다.', 'red');
+  reader.readAsDataURL(file);
+}
 
 function handleFtImageSelected(input) {
   const file = input.files[0];
   input.value = ''; // 같은 파일 재선택 가능하도록 초기화
   if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const dataUrl = reader.result; // "data:image/png;base64,...."
-    const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
-    if (!m) { toast('이미지 파일을 읽을 수 없습니다.', 'red'); return; }
-    await analyzeFtImage(m[2], m[1]);
-  };
-  reader.onerror = () => toast('이미지 파일을 읽을 수 없습니다.', 'red');
-  reader.readAsDataURL(file);
+  readImageFileAndAnalyze(file);
 }
+
+// 선물동향 탭이 활성화된 상태에서 Ctrl+V로 클립보드 이미지를 바로 붙여넣어 분석
+document.addEventListener('paste', (e) => {
+  const tab = document.getElementById('tab-futures');
+  if (!tab || !tab.classList.contains('active')) return;
+  const items = (e.clipboardData || window.clipboardData)?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type && item.type.indexOf('image') !== -1) {
+      const file = item.getAsFile();
+      if (file) { e.preventDefault(); readImageFileAndAnalyze(file); }
+      break;
+    }
+  }
+});
 
 async function analyzeFtImage(base64Data, mediaType) {
   toast('이미지 분석 중... 잠시만 기다려주세요.', 'blue');
@@ -5874,8 +5909,14 @@ async function analyzeFtImage(base64Data, mediaType) {
       return;
     }
     ftImagePreview = data.entries.map(e => ({ date: e.date, upper: e.upper, lower: e.lower }));
+    ftImageRefs = Array.isArray(data.kospi_refs) ? data.kospi_refs : [];
+    ftImageRatio = (typeof data.ratio === 'number') ? data.ratio : null;
+    ftImageRatioSource = data.ratio_source || null;
     renderFtImagePreview();
-    toast(`${ftImagePreview.length}건 인식 완료. 확인 후 저장하세요.`, 'green');
+    const ratioMsg = ftImageRatio !== null
+      ? ` (참고선 ${ftImageRefs.length}개 인식 → 배율 ${ftImageRatio.toFixed(4)})`
+      : ' (참고선 인식 안됨 → 저장 시 기본 배율 적용)';
+    toast(`${ftImagePreview.length}건 인식 완료.${ratioMsg}`, 'green');
   } catch (e) {
     toast('인식 실패, 수동 입력해주세요.', 'red');
   }
@@ -5885,6 +5926,15 @@ function renderFtImagePreview() {
   const card = document.getElementById('ft-image-preview-card');
   if (!ftImagePreview.length) { card.style.display = 'none'; return; }
   card.style.display = '';
+
+  const refsNote = document.getElementById('ft-image-refs-note');
+  if (ftImageRatio !== null) {
+    const refsText = ftImageRefs.map(r => `선물 ${r.futures}=코스피 ${r.kospi}`).join(', ');
+    refsNote.innerHTML = `📐 인식된 코스피 참고선: ${refsText} → <strong>이번 주 실측 배율 ${ftImageRatio.toFixed(4)}</strong>`;
+  } else {
+    refsNote.textContent = '📐 이미지에서 코스피 참고선을 찾지 못했습니다 → 저장 시 기존 배율(실측치 없으면 고정값)이 적용됩니다.';
+  }
+
   document.getElementById('ft-image-preview-tbody').innerHTML = ftImagePreview.map((e, i) => `
     <tr>
       <td><input type="date" value="${e.date}" onchange="updateFtPreviewField(${i},'date',this.value)" style="width:130px"></td>
@@ -5905,6 +5955,9 @@ function removeFtPreviewRow(idx) {
 
 function cancelFtImagePreview() {
   ftImagePreview = [];
+  ftImageRefs = [];
+  ftImageRatio = null;
+  ftImageRatioSource = null;
   renderFtImagePreview();
 }
 
@@ -5922,16 +5975,47 @@ async function saveFtImagePreview() {
       const res = await fetch(`${futuresApiBase()}/api/futures`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: r.date, upper: r.upper, lower: r.lower, close_price: null }),
+        body: JSON.stringify({
+          date: r.date, upper: r.upper, lower: r.lower, close_price: null,
+          weekly_ratio: ftImageRatio, ratio_source: ftImageRatioSource,
+        }),
       });
       if (res.ok) okCount++;
     } catch (e) { /* 개별 실패는 건너뛰고 계속 저장 */ }
   }
 
+  // 이번 배치에서 참고선을 찾았으면 나중 회귀분석용으로 누적 저장
+  if (ftImageRefs.length) {
+    const batchDate = rows.map(r => r.date).sort()[0];
+    try {
+      await fetch(`${futuresApiBase()}/api/futures/kospi-refs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_date: batchDate, refs: ftImageRefs }),
+      });
+    } catch (e) { /* 참고선 저장 실패는 조용히 무시 (핵심 데이터 저장은 이미 완료) */ }
+  }
+
   ftImagePreview = [];
+  ftImageRefs = [];
+  ftImageRatio = null;
+  ftImageRatioSource = null;
   renderFtImagePreview();
   await renderFutures();
   toast(`${okCount}건 저장 완료`, 'green');
+}
+
+// 누적된 코스피 참고선 전체로 배율을 재산정 (실측치 없는 행에만 반영)
+async function recalcFtRatio() {
+  try {
+    const res = await fetch(`${futuresApiBase()}/api/futures/recalc-ratio`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || '재계산 실패', 'red'); return; }
+    toast(`참고선 ${data.pointCount}개 기반 배율 ${data.ratio.toFixed(4)}로 ${data.updatedRows}건 갱신`, 'green');
+    await renderFutures();
+  } catch (e) {
+    toast('재계산 실패', 'red');
+  }
 }
 
 // ══════════════════════════════════════════════════════
