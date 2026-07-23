@@ -3821,9 +3821,11 @@ function calcDY() {
 // ══════════════════════════════════════════════════════
 let _watchGroup = 'watch1';
 let _watchReadyAccountFilter = 'all';
+let _holdingSyncPending = false;  // true인 동안만 renderWatchlist()가 매매일지→holding 동기화를 1회 실행
 
 function switchWatchGroup(btn, group) {
   _watchGroup = group;
+  if (group === 'holding') _holdingSyncPending = true;
   document.querySelectorAll('#w-group-tabs .sub-tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderWatchlist();
@@ -4254,7 +4256,10 @@ function renderWatchlist() {
   // 그룹 필터 + 계좌 필터 + 검색어 필터
   let list;
   if (_watchGroup === 'holding') {
-    syncHoldingWatchlistWithPortfolio(_allPmRows);
+    if (_holdingSyncPending) {
+      syncHoldingWatchlistWithPortfolio(_allPmRows);
+      _holdingSyncPending = false;
+    }
     const pmMap = new Map(_allPmRows.map(pm => [pm.stock, pm]));
     list = watchlist
       .filter(w => normalizeGroup(w.group) === 'holding')
