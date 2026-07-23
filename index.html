@@ -1645,6 +1645,7 @@ let _tgSentAlerts    = JSON.parse(localStorage.getItem('sm-tg-sent')  || '{}');
 const save = (key, data) => {
   localStorage.setItem('sm-' + key, JSON.stringify(data));
   if (key === 'watchlist' || key === 'etfwatchlist') syncSubscribedCodes();
+  if (key === 'watchlist') syncWatchlistGroupsToServer();
 };
 
 // ══════════════════════════════════════════════════════
@@ -7017,6 +7018,29 @@ function syncSubscribedCodes() {
   })
     .then(() => console.log(`📡 구독 동기화: ${[...codes].join(', ')}`))
     .catch(err => console.log('구독 동기화 실패:', err.message));
+}
+
+// 관심종목 그룹(holding/watch1/watch2/ready) 종목코드 리스트를 서버 watchlist.json에 동기화
+// → 서버의 analyzeWatch2() 등이 실제로 이 목록을 기준으로 분석하므로, 편집할 때마다 반영돼야 함
+function syncWatchlistGroupsToServer() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+
+  const groups = { holding: [], watch1: [], watch2: [], ready: [] };
+  watchlist.forEach(w => {
+    const code = String(w.ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
+    if (!/^[0-9]{6}$/.test(code)) return;
+    const g = Object.prototype.hasOwnProperty.call(groups, w.group) ? w.group : 'holding';
+    groups[g].push(code);
+  });
+
+  fetch(`${proxyUrl}/watchlist`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+    body: JSON.stringify({ groups })
+  })
+    .then(() => console.log(`📋 watchlist 서버 동기화: holding:${groups.holding.length} watch1:${groups.watch1.length} watch2:${groups.watch2.length} ready:${groups.ready.length}`))
+    .catch(err => console.log('watchlist 서버 동기화 실패:', err.message));
 }
 
 // SSE 연결 상태 표시
