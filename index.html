@@ -4290,7 +4290,9 @@ function renderWatchlist() {
   const holdingsPerAcct = {};
   WATCH_ACCTS.forEach(a => { holdingsPerAcct[a] = calcHoldingsFromJournal(a); });
 
-  const _watch2SigsCache = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
+  // sm-watch2-signals가 손상돼 있어도(잘못된 JSON 등) 전체 렌더링이 죽지 않도록 방어
+  let _watch2SigsCache = {};
+  try { _watch2SigsCache = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}'); } catch (e) { _watch2SigsCache = {}; }
 
   container.innerHTML = list.map((w, listIdx) => {
     const sig  = w.signal || 'gray';
@@ -4994,7 +4996,8 @@ function _wcBadgeHtml(id, field, cls, label, val, price) {
 // ── 관찰2 전고점: 자동계산/수동입력 판별 + 표시 (요약 배지·상세패널 공용) ──
 function _getWatch2Signal(w) {
   const code = (w.ticker || '').replace(/\.(KS|KQ)$/i, '');
-  const sigs = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
+  let sigs = {};
+  try { sigs = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}'); } catch (e) { sigs = {}; }
   return sigs[code] || {};
 }
 
