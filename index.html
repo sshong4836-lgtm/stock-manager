@@ -4290,9 +4290,17 @@ function renderWatchlist() {
   const holdingsPerAcct = {};
   WATCH_ACCTS.forEach(a => { holdingsPerAcct[a] = calcHoldingsFromJournal(a); });
 
+  const _watch2SigsCache = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
+
   container.innerHTML = list.map((w, listIdx) => {
     const sig  = w.signal || 'gray';
     const wGrp = normalizeGroup(w.group);
+
+    // 관찰2 전고점: 자동계산/수동입력 여부 — 상세패널 입력란과 요약 배지가 공유
+    const _w2ss = wGrp === 'watch2' ? (_watch2SigsCache[(w.ticker || '').replace(/\.(KS|KQ)$/i, '')] || {}) : {};
+    const _w2HasManualPeak = parseFloat(w.trendH1Price || 0) > 0;
+    const _w2PeakPlaceholder = (wGrp === 'watch2' && !_w2HasManualPeak && _w2ss.resistancePrice)
+      ? `자동: ${fmt(Math.round(_w2ss.resistancePrice))}` : '0';
 
     // 상세패널 각 필드
     const ea = escAttr, eh = escHtml;
@@ -4305,8 +4313,8 @@ function renderWatchlist() {
               onchange="saveWatchField(${w.id},'trendH1Date',this.value)">
           </div>
           <div class="form-group">
-            <label>고점1 가격 / 저항선</label>
-            <input type="number" value="${ea(w.trendH1Price)}" placeholder="0"
+            <label>고점1 가격 / 저항선${wGrp === 'watch2' ? _buildPeakModeTag(_w2HasManualPeak, w.id) : ''}</label>
+            <input type="number" value="${ea(w.trendH1Price)}" placeholder="${ea(_w2PeakPlaceholder)}"
               onchange="saveWatchField(${w.id},'trendH1Price',parseFloat(this.value)||0)">
           </div>
           <div class="form-group">
@@ -4500,23 +4508,8 @@ function renderWatchlist() {
     let w2SigBadges = '';
     let w2PeakBadge = '';
     if (wGrp === 'watch2') {
-      const _sigs = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
-      const _code = (w.ticker || '').replace(/\.(KS|KQ)$/i, '');
-      const _ss   = _sigs[_code] || {};
-
-      // 전고점(저항선) 배지: 서버가 계산한 값(수동 입력 우선, 없으면 최근 20일 최고가 자동) + 현재가 대비 %
-      // 값에 %까지 붙어 다른 배지보다 길어지므로 wc-badge/wc-bl/wc-bv/wc-bsig 기본 고정폭을 인라인으로 넉넉하게 오버라이드
-      const _peak = _ss.resistancePrice || 0;
-      let _peakPctHtml = '';
-      if (_peak && w.price) {
-        const _pct  = (_peak - w.price) / w.price * 100;
-        const _sign = _pct >= 0 ? '+' : '';
-        const _clr  = _pct <= 0 ? 'var(--green)' : (_pct <= 5 ? 'var(--blue)' : 'var(--muted)');
-        _peakPctHtml = `<span class="wc-bsig" style="width:auto;color:${_clr}">(${_sign}${fmtF(_pct,1)}%)</span>`;
-      }
-      const _peakCls = _peak ? (w.price >= _peak ? 'wc-badge-green' : 'wc-badge-blue') : 'wc-badge-empty';
-      const _peakTitle = _peak ? (_ss.resistanceIsAuto ? '전고점 · 최근 20일 최고가 자동계산' : '전고점 · 수동입력값') : '전고점 데이터 없음';
-      w2PeakBadge = `<span class="wc-badge ${_peakCls}" style="width:auto;min-width:140px;cursor:default" title="${_peakTitle}"><span class="wc-bl" style="width:auto">전고점</span><span class="wc-bv" style="width:auto">${_peak ? fmt(Math.round(_peak)) : '—'}</span>${_peakPctHtml}</span>`;
+      // 전고점(저항선) 배지: 자동/수동 여부에 따라 색상·굵기·아이콘·라벨로 구분 (_buildW2PeakBadge)
+      w2PeakBadge = _buildW2PeakBadge(w, _w2ss);
 
       w2SigBadges = [
         ['alertRsiOversold','📈RSI'],
@@ -4524,7 +4517,7 @@ function renderWatchlist() {
         ['alertBullish',    '🕯양봉'],
         ['alertGoldenCross','🌟골든X'],
         ['alertMaAlignment','📐정배열'],
-      ].filter(([k]) => w[k] && _ss[k])
+      ].filter(([k]) => w[k] && _w2ss[k])
        .map(([,l]) => `<span style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">${l}</span>`)
        .join('');
       // 추세선돌파: alertTrend 활성화 + 로컬 데이터로 직접 판단
@@ -4884,6 +4877,22 @@ function updateTrendlineDisplay(id) {
       if (html) grid.insertAdjacentHTML('beforeend', html);
     }
   }
+  // 관찰2: 자동/수동 전고점 표시 — 상세패널 라벨 태그·입력란 placeholder·요약 배지를 한 번에 갱신
+  if (w.group === 'watch2') {
+    const ss = _getWatch2Signal(w);
+    const hasManual = parseFloat(w.trendH1Price || 0) > 0;
+
+    const tagEl = document.getElementById('peak-mode-tag-' + id);
+    if (tagEl) tagEl.outerHTML = _buildPeakModeTag(hasManual, id);
+
+    if (panel) {
+      const inp = panel.querySelector(`input[onchange*="'trendH1Price'"]`);
+      if (inp) inp.placeholder = (!hasManual && ss.resistancePrice) ? `자동: ${fmt(Math.round(ss.resistancePrice))}` : '0';
+    }
+
+    const badgeEl = document.querySelector(`[data-peak-badge="${id}"]`);
+    if (badgeEl) badgeEl.outerHTML = _buildW2PeakBadge(w, ss);
+  }
   // wc-main 배지 갱신
   const row = document.querySelector(`.wc-row[data-id="${id}"]`);
   if (row) {
@@ -4980,6 +4989,50 @@ function _badgeInner(label, val, field, price) {
 
 function _wcBadgeHtml(id, field, cls, label, val, price) {
   return `<span class="wc-badge ${val ? cls : 'wc-badge-empty'}" data-field="${field}" onclick="startWatchBadgeEdit(event,${id},'${field}')" title="${label} 클릭하여 수정">${_badgeInner(label, val, field, price)}</span>`;
+}
+
+// ── 관찰2 전고점: 자동계산/수동입력 판별 + 표시 (요약 배지·상세패널 공용) ──
+function _getWatch2Signal(w) {
+  const code = (w.ticker || '').replace(/\.(KS|KQ)$/i, '');
+  const sigs = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
+  return sigs[code] || {};
+}
+
+function _buildPeakModeTag(hasManual, id) {
+  const idAttr = id ? ` id="peak-mode-tag-${id}"` : '';
+  return hasManual
+    ? `<span${idAttr} style="font-size:9px;font-weight:800;margin-left:6px;color:var(--purple)">📌 수동</span>`
+    : `<span${idAttr} style="font-size:9px;font-weight:800;margin-left:6px;color:var(--muted)">🔄 자동</span>`;
+}
+
+function _buildW2PeakBadge(w, ss) {
+  // 수동입력이 있으면 서버 응답을 기다리지 않고 로컬 값으로 즉시 계산 (서버 판단 우선순위와 동일한 규칙)
+  const hasManual = parseFloat(w.trendH1Price || 0) > 0;
+  let peak, isAuto;
+  if (hasManual) {
+    isAuto = false;
+    if (w.trendH1Date && w.trendH2Date) {
+      const tl = calcTrendlinePrice(w);
+      peak = tl !== null ? tl : parseFloat(w.trendH1Price);
+    } else {
+      peak = parseFloat(w.trendH1Price);
+    }
+  } else {
+    isAuto = true;
+    peak = (ss && ss.resistancePrice) || 0;
+  }
+  let pctHtml = '';
+  if (peak && w.price) {
+    const pct   = (peak - w.price) / w.price * 100;
+    const sign  = pct >= 0 ? '+' : '';
+    const color = pct <= 0 ? 'var(--green)' : (pct <= 5 ? 'var(--blue)' : 'var(--muted)');
+    pctHtml = `<span class="wc-bsig" style="width:auto;color:${color}">(${sign}${fmtF(pct,1)}%)</span>`;
+  }
+  const cls      = peak ? (w.price >= peak ? 'wc-badge-green' : 'wc-badge-blue') : 'wc-badge-empty';
+  const title    = peak ? (isAuto ? '전고점 · 최근 20일 최고가 자동계산' : '전고점 · 수동입력값') : '전고점 데이터 없음';
+  const valStyle = peak ? (isAuto ? 'color:var(--muted);font-weight:600' : 'color:var(--purple);font-weight:800') : '';
+  const modeTag  = peak ? `<span style="font-size:8px;font-weight:800;margin-left:1px;${isAuto ? 'color:var(--muted)' : 'color:var(--purple)'}">${isAuto ? '🔄자동' : '📌수동'}</span>` : '';
+  return `<span class="wc-badge ${cls}" data-peak-badge="${w.id}" style="width:auto;min-width:150px;cursor:default" title="${title}"><span class="wc-bl" style="width:auto">전고점</span><span class="wc-bv" style="width:auto;${valStyle}">${peak ? fmt(Math.round(peak)) : '—'}</span>${pctHtml}${modeTag}</span>`;
 }
 
 function updateWatchBadgesInPlace(id) {
