@@ -4498,10 +4498,26 @@ function renderWatchlist() {
 
     // watch2 조건 충족 배지 계산
     let w2SigBadges = '';
+    let w2PeakBadge = '';
     if (wGrp === 'watch2') {
       const _sigs = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}');
       const _code = (w.ticker || '').replace(/\.(KS|KQ)$/i, '');
       const _ss   = _sigs[_code] || {};
+
+      // 전고점(저항선) 배지: 서버가 계산한 값(수동 입력 우선, 없으면 최근 20일 최고가 자동) + 현재가 대비 %
+      // 값에 %까지 붙어 다른 배지보다 길어지므로 wc-badge/wc-bl/wc-bv/wc-bsig 기본 고정폭을 인라인으로 넉넉하게 오버라이드
+      const _peak = _ss.resistancePrice || 0;
+      let _peakPctHtml = '';
+      if (_peak && w.price) {
+        const _pct  = (_peak - w.price) / w.price * 100;
+        const _sign = _pct >= 0 ? '+' : '';
+        const _clr  = _pct <= 0 ? 'var(--green)' : (_pct <= 5 ? 'var(--blue)' : 'var(--muted)');
+        _peakPctHtml = `<span class="wc-bsig" style="width:auto;color:${_clr}">(${_sign}${fmtF(_pct,1)}%)</span>`;
+      }
+      const _peakCls = _peak ? (w.price >= _peak ? 'wc-badge-green' : 'wc-badge-blue') : 'wc-badge-empty';
+      const _peakTitle = _peak ? (_ss.resistanceIsAuto ? '전고점 · 최근 20일 최고가 자동계산' : '전고점 · 수동입력값') : '전고점 데이터 없음';
+      w2PeakBadge = `<span class="wc-badge ${_peakCls}" style="width:auto;min-width:140px;cursor:default" title="${_peakTitle}"><span class="wc-bl" style="width:auto">전고점</span><span class="wc-bv" style="width:auto">${_peak ? fmt(Math.round(_peak)) : '—'}</span>${_peakPctHtml}</span>`;
+
       w2SigBadges = [
         ['alertRsiOversold','📈RSI'],
         ['alertVolume',     '📊거래량'],
@@ -4657,7 +4673,7 @@ function renderWatchlist() {
           </div>
           <div class="wc-price-badges">
             ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
-            ${_wcBadgeHtml(w.id,'stopPrice',   'wc-badge-red',  '손절',w.stopPrice,   w.price)}
+            ${wGrp === 'watch2' ? w2PeakBadge : _wcBadgeHtml(w.id,'stopPrice','wc-badge-red','손절',w.stopPrice,w.price)}
             ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
           </div>
           <div class="wc-actions no-print" style="margin-left:auto">
