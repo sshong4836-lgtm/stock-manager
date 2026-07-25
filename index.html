@@ -1646,7 +1646,85 @@ const save = (key, data) => {
   localStorage.setItem('sm-' + key, JSON.stringify(data));
   if (key === 'watchlist' || key === 'etfwatchlist') syncSubscribedCodes();
   if (key === 'watchlist') syncWatchlistGroupsToServer();
+  if (key === 'etfwatchlist' || key === 'dividends') scheduleEtfServerBackup();
 };
+
+// ── ETF 관심종목/매매일지/배당기록 서버 자동 백업 ──
+// (localStorage에만 있으면 브라우저 데이터 유실 시 복구 불가 — 2026-07-25 sm-watchlist 유실
+//  사고 이후 추가. watchlist가 서버 watchlist.json에 상시 동기화되는 것과 동일한 방식)
+const ETF_SERVER_KEYS = ['sm-etfwatchlist', 'sm-etf-tickers', 'sm-dividends']
+  .concat(ETF_ACCOUNTS.flatMap(a => [a.jKey, a.dKey]));
+
+function collectEtfServerData() {
+  const out = {
+    'sm-etfwatchlist': JSON.stringify(etfWatchlist),
+    'sm-etf-tickers':  JSON.stringify(etfTickerMap),
+    'sm-dividends':    JSON.stringify(dividends),
+  };
+  ETF_ACCOUNTS.forEach(a => {
+    out[a.jKey] = JSON.stringify(etfAcctJ[a.id]);
+    out[a.dKey] = JSON.stringify(etfAcctD[a.id]);
+  });
+  return out;
+}
+
+let _etfBackupTimer = null;
+function scheduleEtfServerBackup() {
+  if (_etfBackupTimer) clearTimeout(_etfBackupTimer);
+  _etfBackupTimer = setTimeout(sendEtfServerBackup, 4000);
+}
+async function sendEtfServerBackup() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  try {
+    const res = await fetch(`${proxyUrl}/api/etf-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify({ data: collectEtfServerData() })
+    });
+    if (res.ok) console.log('☁️ ETF 데이터 서버 백업 완료');
+  } catch (e) {
+    console.log('ETF 서버 백업 실패:', e.message);
+  }
+}
+
+// 페이지가 닫힐 때 마지막 변경분을 최대한 서버로 보내려는 시도 (best-effort)
+window.addEventListener('beforeunload', () => {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl || !_etfBackupTimer) return; // 대기 중인 변경분이 없으면 스킵
+  try {
+    const blob = new Blob([JSON.stringify({ data: collectEtfServerData() })], { type: 'application/json' });
+    navigator.sendBeacon(`${proxyUrl}/api/etf-data`, blob);
+  } catch (e) {}
+});
+
+// localStorage(ETF 관련 13개 키)가 전부 비어있을 때만(=브라우저 데이터 유실 상황) 서버에서 채운다.
+// 일부만 비어있는 건 정상 사용 패턴(특정 계좌 미사용 등)이라 건드리지 않음.
+async function restoreEtfDataFromServer() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  const allEmpty = ETF_SERVER_KEYS.every(k => localStorage.getItem(k) === null);
+  if (!allEmpty) return;
+  try {
+    const res = await fetch(`${proxyUrl}/api/etf-data`, { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) return;
+    const { data } = await res.json();
+    if (!data) return;
+    let restored = 0;
+    ETF_SERVER_KEYS.forEach(key => {
+      if (data[key] !== undefined && localStorage.getItem(key) === null) {
+        localStorage.setItem(key, data[key]);
+        restored++;
+      }
+    });
+    if (restored > 0) {
+      console.log(`☁️ ETF 데이터 서버에서 자동 복구 (${restored}개 키)`);
+      location.reload();
+    }
+  } catch (e) {
+    console.log('ETF 서버 백업 복구 확인 실패:', e.message);
+  }
+}
 
 // ══════════════════════════════════════════════════════
 // 탭 전환
@@ -2921,13 +2999,16 @@ function renderDividend() {
 function saveEtfJ(acctId) {
   const a = ETF_ACCOUNTS.find(a => a.id === acctId);
   localStorage.setItem(a.jKey, JSON.stringify(etfAcctJ[acctId]));
+  scheduleEtfServerBackup();
 }
 function saveEtfD(acctId) {
   const a = ETF_ACCOUNTS.find(a => a.id === acctId);
   localStorage.setItem(a.dKey, JSON.stringify(etfAcctD[acctId]));
+  scheduleEtfServerBackup();
 }
 function saveEtfTickers() {
   localStorage.setItem('sm-etf-tickers', JSON.stringify(etfTickerMap));
+  scheduleEtfServerBackup();
   syncSubscribedCodes();
 }
 
@@ -7120,6 +7201,41 @@ function syncWatchlistGroupsToServer() {
     .catch(err => console.log('watchlist 서버 동기화 실패:', err.message));
 }
 
+// localStorage(sm-watchlist)가 비어있을 때(브라우저 데이터 유실 등) 서버 watchlist.json에서
+// 그룹/종목코드를 가져와 복구한다. 종목명은 서버가 시총 캐시 등으로 함께 resolve해서 내려줌.
+async function restoreWatchlistFromServer() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  try {
+    const res = await fetch(`${proxyUrl}/watchlist`, { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data   = await res.json();
+    const groups = data.groups || {};
+    const names  = data.names  || {};
+
+    const restored = [];
+    ['holding', 'watch1', 'watch2', 'ready'].forEach(g => {
+      (groups[g] || []).forEach(code => {
+        restored.push({
+          id: Date.now() + Math.floor(Math.random() * 100000),
+          stock: names[code] || code,
+          ticker: code,
+          group: g
+        });
+      });
+    });
+    if (!restored.length) return;
+
+    watchlist = restored;
+    localStorage.setItem('sm-watchlist', JSON.stringify(watchlist));
+    renderWatchlist();
+    toast(`♻️ 서버 데이터로 관심종목 ${restored.length}개 복구했습니다.`);
+    console.log(`♻️ sm-watchlist 서버 복구 완료: holding:${groups.holding?.length||0} watch1:${groups.watch1?.length||0} watch2:${groups.watch2?.length||0} ready:${groups.ready?.length||0}`);
+  } catch (e) {
+    console.log('watchlist 서버 복구 실패:', e.message);
+  }
+}
+
 // SSE 연결 상태 표시
 function updateSSEStatus(connected) {
   const btn = document.getElementById('sse-status-btn');
@@ -7130,8 +7246,12 @@ function updateSSEStatus(connected) {
 }
 
 // 페이지 로드 시 자동 SSE 연결 + 구독 목록 전송
-setTimeout(() => {
+// (localStorage sm-watchlist / ETF 데이터가 비어있으면 서버에서 먼저 복구한 뒤 구독)
+setTimeout(async () => {
   if (kiwoomSettings.proxyUrl) {
+    if (!watchlist.length) await restoreWatchlistFromServer();
+    await restoreEtfDataFromServer();
+    scheduleEtfServerBackup(); // 매 세션 시작 시 한 번은 서버에 현재 상태를 반영해둔다
     startRealtimeSSE();
     setTimeout(syncSubscribedCodes, 2000);
   }
