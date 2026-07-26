@@ -1589,7 +1589,7 @@
         <div class="info-note info-note-blue" style="margin-bottom:12px">
           관심종목(보유·watch1·watch2·후보) 저장 시마다 서버에 버전이 남습니다.<br>
           최근 20개까지 보관되며, 넘으면 오래된 순으로 자동 삭제됩니다.<br>
-          <span style="color:var(--muted);font-size:12px">※ 그룹 소속만 복원되고, 종목별 손절가·목표가·메모는 대상이 아닙니다.</span>
+          <span style="color:var(--muted);font-size:12px">※ 그룹 소속(보유·watch1·watch2·후보)과 종목별 손절가·목표가·메모까지 함께 복원됩니다.</span>
         </div>
         <div class="row-flex" style="margin-bottom:10px">
           <button class="btn btn-ghost btn-sm" onclick="loadBackupList('watchlist')">🔄 목록 새로고침</button>
@@ -7288,17 +7288,20 @@ function syncWatchlistGroupsToServer() {
   if (!proxyUrl) return;
 
   const groups = { holding: [], watch1: [], watch2: [], ready: [] };
+  // 종목코드별 손절가/목표가/메모 — 그룹 소속과 별개로 코드 기준 저장해 백업/복원 대상에 포함시킨다
+  const details = {};
   watchlist.forEach(w => {
     const code = String(w.ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
     if (!/^[0-9]{6}$/.test(code)) return;
     const g = Object.prototype.hasOwnProperty.call(groups, w.group) ? w.group : 'holding';
     groups[g].push(code);
+    details[code] = { stopPrice: w.stopPrice || 0, target: w.target || 0, memo: w.memo || '' };
   });
 
   fetch(`${proxyUrl}/watchlist`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
-    body: JSON.stringify({ groups })
+    body: JSON.stringify({ groups, details })
   })
     .then(() => console.log(`📋 watchlist 서버 동기화: holding:${groups.holding.length} watch1:${groups.watch1.length} watch2:${groups.watch2.length} ready:${groups.ready.length}`))
     .catch(err => console.log('watchlist 서버 동기화 실패:', err.message));
@@ -7312,18 +7315,23 @@ async function restoreWatchlistFromServer() {
   try {
     const res = await fetch(`${proxyUrl}/watchlist`, { headers: { 'ngrok-skip-browser-warning': '1' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data   = await res.json();
-    const groups = data.groups || {};
-    const names  = data.names  || {};
+    const data    = await res.json();
+    const groups  = data.groups || {};
+    const names   = data.names  || {};
+    const details = groups.details || {};
 
     const restored = [];
     ['holding', 'watch1', 'watch2', 'ready'].forEach(g => {
       (groups[g] || []).forEach(code => {
+        const d = details[code] || {};
         restored.push({
           id: Date.now() + Math.floor(Math.random() * 100000),
           stock: names[code] || code,
           ticker: code,
-          group: g
+          group: g,
+          stopPrice: d.stopPrice || 0,
+          target: d.target || 0,
+          memo: d.memo || ''
         });
       });
     });
