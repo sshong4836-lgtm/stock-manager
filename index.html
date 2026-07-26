@@ -2024,7 +2024,7 @@ function renderPipelineEvents() {
       <td class="text-muted">${it.price_after_30m != null ? fmt(it.price_after_30m) : '계산중'}</td>
       <td>${pctTxt(it.stock_return_pct)}</td>
       <td class="text-muted">${pctTxt(it.kospi_return_pct)}</td>
-      <td class="${cc(it.alpha)}" style="font-weight:700">${it.alpha == null ? '계산중' : (it.alpha > 0 ? '+' : '') + fmtF(it.alpha, 2) + '%p'}</td>
+      <td class="${cc(it.alpha)}" style="font-weight:700">${it.alpha == null ? '계산중' : (it.alpha > 0 ? '+' : '') + fmtF(it.alpha, 2) + '%p'}${it.is_delayed ? ' <span title="예정 시각을 지나 지연 계산됨(서버 재시작 등으로 추정)" style="font-size:11px;color:var(--muted);cursor:help">⏰지연</span>' : ''}</td>
     </tr>`).join('');
   if (moreBtn) moreBtn.style.display = pipelineEventsShown < pipelineEventsAll.length ? 'inline-block' : 'none';
 }
