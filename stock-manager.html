@@ -1789,7 +1789,7 @@ async function loadBackupList(kind) {
     listEl.innerHTML = backups.map(ts => `
       <div class="row-flex" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:13px">${fmtBackupTs(ts)}</span>
-        <button class="btn btn-ghost btn-sm" onclick="restoreBackup('${kind}','${ts}')">이 버전으로 복원</button>
+        <button class="btn btn-ghost btn-sm" onclick="restoreBackupVersion('${kind}','${ts}')">이 버전으로 복원</button>
       </div>
     `).join('');
   } catch (e) {
@@ -1797,7 +1797,7 @@ async function loadBackupList(kind) {
   }
 }
 
-async function restoreBackup(kind, ts) {
+async function restoreBackupVersion(kind, ts) {
   if (!confirm(`정말 ${fmtBackupTs(ts)} 시점으로 되돌리시겠습니까?\n현재 데이터는 이 버전으로 덮어써집니다.`)) return;
   const proxyUrl = kiwoomSettings.proxyUrl;
   if (!proxyUrl) return;
