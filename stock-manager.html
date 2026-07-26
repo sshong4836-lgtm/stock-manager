@@ -1580,6 +1580,41 @@
       </div>
     </div>
   </div>
+
+  <!-- 백업 관리 -->
+  <div class="two-col" style="margin-top:0">
+    <div>
+      <div class="card">
+        <div class="card-title">🗂️ 관심종목 백업 관리</div>
+        <div class="info-note info-note-blue" style="margin-bottom:12px">
+          관심종목(보유·watch1·watch2·후보) 저장 시마다 서버에 버전이 남습니다.<br>
+          최근 20개까지 보관되며, 넘으면 오래된 순으로 자동 삭제됩니다.<br>
+          <span style="color:var(--muted);font-size:12px">※ 그룹 소속만 복원되고, 종목별 손절가·목표가·메모는 대상이 아닙니다.</span>
+        </div>
+        <div class="row-flex" style="margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="loadBackupList('watchlist')">🔄 목록 새로고침</button>
+        </div>
+        <div id="backup-list-watchlist" style="max-height:320px;overflow-y:auto">
+          <div class="empty">목록 새로고침을 눌러주세요.</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">🗂️ ETF·매매일지·배당기록 백업 관리</div>
+        <div class="info-note info-note-blue" style="margin-bottom:12px">
+          ETF 관심종목·계좌별 매매일지·배당기록과 일반 매매일지·데이트레이드·포트폴리오 수동입력이<br>
+          저장될 때마다(약 4초 후) 서버에 버전이 남습니다. 최근 20개까지 보관됩니다.
+        </div>
+        <div class="row-flex" style="margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="loadBackupList('etf')">🔄 목록 새로고침</button>
+        </div>
+        <div id="backup-list-etf" style="max-height:320px;overflow-y:auto">
+          <div class="empty">목록 새로고침을 눌러주세요.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 </div><!-- /content -->
@@ -1646,13 +1681,14 @@ const save = (key, data) => {
   localStorage.setItem('sm-' + key, JSON.stringify(data));
   if (key === 'watchlist' || key === 'etfwatchlist') syncSubscribedCodes();
   if (key === 'watchlist') syncWatchlistGroupsToServer();
-  if (key === 'etfwatchlist' || key === 'dividends') scheduleEtfServerBackup();
+  if (['etfwatchlist', 'dividends', 'journals', 'daytrades', 'pmanual', 'pmeta'].includes(key)) scheduleEtfServerBackup();
 };
 
-// ── ETF 관심종목/매매일지/배당기록 서버 자동 백업 ──
+// ── ETF 관심종목/매매일지/배당기록 + 일반 매매일지/데이트레이드/포트폴리오 수동입력 서버 자동 백업 ──
 // (localStorage에만 있으면 브라우저 데이터 유실 시 복구 불가 — 2026-07-25 sm-watchlist 유실
-//  사고 이후 추가. watchlist가 서버 watchlist.json에 상시 동기화되는 것과 동일한 방식)
-const ETF_SERVER_KEYS = ['sm-etfwatchlist', 'sm-etf-tickers', 'sm-dividends']
+//  사고 이후 추가. watchlist가 서버 watchlist.json에 상시 동기화되는 것과 동일한 방식.
+//  이름은 ETF_*로 남아있지만 2026-07-26부터 ETF 외 데이터도 같은 백업 파이프라인을 탄다.)
+const ETF_SERVER_KEYS = ['sm-etfwatchlist', 'sm-etf-tickers', 'sm-dividends', 'sm-journals', 'sm-daytrades', 'sm-pmanual', 'sm-pmeta']
   .concat(ETF_ACCOUNTS.flatMap(a => [a.jKey, a.dKey]));
 
 function collectEtfServerData() {
@@ -1660,6 +1696,10 @@ function collectEtfServerData() {
     'sm-etfwatchlist': JSON.stringify(etfWatchlist),
     'sm-etf-tickers':  JSON.stringify(etfTickerMap),
     'sm-dividends':    JSON.stringify(dividends),
+    'sm-journals':     JSON.stringify(journals),
+    'sm-daytrades':    JSON.stringify(dayTrades),
+    'sm-pmanual':      JSON.stringify(portfolioManual),
+    'sm-pmeta':        JSON.stringify(portfolioMeta),
   };
   ETF_ACCOUNTS.forEach(a => {
     out[a.jKey] = JSON.stringify(etfAcctJ[a.id]);
@@ -1698,7 +1738,7 @@ window.addEventListener('beforeunload', () => {
   } catch (e) {}
 });
 
-// localStorage(ETF 관련 13개 키)가 전부 비어있을 때만(=브라우저 데이터 유실 상황) 서버에서 채운다.
+// localStorage(위 ETF_SERVER_KEYS 17개 키)가 전부 비어있을 때만(=브라우저 데이터 유실 상황) 서버에서 채운다.
 // 일부만 비어있는 건 정상 사용 패턴(특정 계좌 미사용 등)이라 건드리지 않음.
 async function restoreEtfDataFromServer() {
   const proxyUrl = kiwoomSettings.proxyUrl;
@@ -1726,6 +1766,69 @@ async function restoreEtfDataFromServer() {
   }
 }
 
+// ── 설정 탭: 백업 목록 조회 / 특정 버전으로 복원 ──
+// ts 형식 예: 2026-07-26T02-26-00-727Z → 사람이 읽을 수 있는 로컬시간으로 변환
+function fmtBackupTs(ts) {
+  const iso = ts.replace(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/, '$1T$2:$3:$4.$5Z');
+  const d = new Date(iso);
+  return isNaN(d) ? ts : d.toLocaleString('ko-KR', { hour12: false });
+}
+
+async function loadBackupList(kind) {
+  const listEl = document.getElementById(`backup-list-${kind}`);
+  if (!listEl) return;
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) { listEl.innerHTML = '<div class="empty">프록시 서버 주소를 먼저 설정하세요.</div>'; return; }
+  listEl.innerHTML = '<div class="empty">불러오는 중...</div>';
+  try {
+    const path = kind === 'watchlist' ? '/api/watchlist/backups' : '/api/etf-data/backups';
+    const res = await fetch(`${proxyUrl}${path}`, { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const { backups } = await res.json();
+    if (!backups || !backups.length) { listEl.innerHTML = '<div class="empty">백업이 없습니다.</div>'; return; }
+    listEl.innerHTML = backups.map(ts => `
+      <div class="row-flex" style="justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px">${fmtBackupTs(ts)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="restoreBackup('${kind}','${ts}')">이 버전으로 복원</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    listEl.innerHTML = `<div class="empty">불러오기 실패: ${e.message}</div>`;
+  }
+}
+
+async function restoreBackup(kind, ts) {
+  if (!confirm(`정말 ${fmtBackupTs(ts)} 시점으로 되돌리시겠습니까?\n현재 데이터는 이 버전으로 덮어써집니다.`)) return;
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  try {
+    if (kind === 'watchlist') {
+      const res = await fetch(`${proxyUrl}/api/watchlist/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        body: JSON.stringify({ ts })
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      await restoreWatchlistFromServer();
+    } else {
+      const res = await fetch(`${proxyUrl}/api/etf-data/rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+        body: JSON.stringify({ ts })
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const { data } = await res.json();
+      ETF_SERVER_KEYS.forEach(key => {
+        if (data && data[key] !== undefined) localStorage.setItem(key, data[key]);
+      });
+    }
+    alert('복원이 완료되었습니다. 새로고침합니다.');
+    location.reload();
+  } catch (e) {
+    alert('복원 실패: ' + e.message);
+  }
+}
+
 // ══════════════════════════════════════════════════════
 // 탭 전환
 // ══════════════════════════════════════════════════════
@@ -1748,7 +1851,7 @@ function switchTab(btn, name) {
   if (name === 'daytrade') renderDayTrade();
   if (name === 'futures')  renderFutures();
   if (name === 'etfwatch') renderEtfWatch();
-  if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); }
+  if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); loadBackupList('watchlist'); loadBackupList('etf'); }
   if (name === 'news')     loadNewsTab();
 }
 
