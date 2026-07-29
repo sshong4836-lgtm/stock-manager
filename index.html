@@ -7127,6 +7127,12 @@ function startRealtimeSSE() {
         if (data.type === 'index' && data.code && data.price) {
           updateIndexDisplay(data.code, data.price, data.change);
         }
+
+        // watch2 배치(08:50 등) 완료 직후 서버가 능동 push → 재접속 없이 즉시 갱신
+        if (data.type === 'watch2signals' && data.signals) {
+          localStorage.setItem('sm-watch2-signals', JSON.stringify(data.signals));
+          renderWatchlist();
+        }
       } catch(err) {
         console.log('SSE 파싱 오류:', err.message);
       }
@@ -7365,6 +7371,8 @@ setTimeout(async () => {
     scheduleEtfServerBackup(); // 매 세션 시작 시 한 번은 서버에 현재 상태를 반영해둔다
     startRealtimeSSE();
     setTimeout(syncSubscribedCodes, 2000);
+    // watch2 신호 폴백 폴링: SSE push를 놓치거나 연결이 끊겨도 5분마다 최신 상태로 보정
+    setInterval(fetchWatch2Signals, 5 * 60 * 1000);
   }
 }, 1000);
 
