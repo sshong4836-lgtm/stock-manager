@@ -1096,6 +1096,7 @@
     <button class="btn btn-sm w-racct-btn"        data-acct="키움"  onclick="setWatchReadyAccountFilter('키움')">💙 키움</button>
     <button class="btn btn-sm w-racct-btn"        data-acct="NH"    onclick="setWatchReadyAccountFilter('NH')">🟢 NH</button>
   </div>
+  <div id="w2-top10-section" style="display:none;margin-bottom:14px"></div>
   <div class="wc-list" id="w-grid"></div>
 </div>
 
@@ -4396,6 +4397,41 @@ async function fetchWatchlistPrices() {
 function escAttr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
+// 관찰2 전용 "오늘의 핵심관찰 TOP10" 카드 — 48종목 풀리스트는 그대로 두고 요약만 상단에 강조 표시
+function renderWatch2Top10() {
+  const section = document.getElementById('w2-top10-section');
+  if (!section) return;
+  if (_watchGroup !== 'watch2') { section.style.display = 'none'; return; }
+
+  let top10 = [];
+  try { top10 = JSON.parse(localStorage.getItem('sm-watch2-top10') || '[]'); } catch (e) { top10 = []; }
+  if (!Array.isArray(top10) || !top10.length) { section.style.display = 'none'; return; }
+
+  section.style.display = '';
+  section.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title">🏆 오늘의 핵심관찰 TOP10</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:8px">
+        ${top10.map(r => `
+          <div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--bg3)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-weight:700;font-size:13px">#${r.rank} ${escHtml(r.name)}</span>
+              <span style="font-size:11px;color:var(--muted)">${escHtml(r.code)}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">
+              ${(r.triggered||[]).length
+                ? r.triggered.map(t => `<span style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px">${escHtml(t)}</span>`).join('')
+                : `<span style="font-size:10px;color:var(--muted)">오늘 신호 없음</span>`}
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              최근7일 avgα: <b style="color:${r.avgAlpha > 0 ? 'var(--green)' : r.avgAlpha < 0 ? 'var(--red)' : 'var(--muted)'}">${(r.avgAlpha||0).toFixed(2)}</b>
+              · score ${(r.score||0).toFixed(1)}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
 function renderWatchlist() {
   const q = document.getElementById('w-search').value.toLowerCase();
 
@@ -4423,6 +4459,8 @@ function renderWatchlist() {
     const btn = document.getElementById('w-gtab-' + g);
     if (btn) btn.textContent = label;
   });
+
+  renderWatch2Top10();
 
   // 매수대기 계좌 필터 바 표시/숨김 및 active 버튼 갱신
   const racctBar = document.getElementById('w-ready-acct-filter');
@@ -7056,6 +7094,15 @@ function fetchWatch2Signals() {
     .catch(() => {});
 }
 
+// "오늘의 핵심관찰 TOP10" fetch → localStorage 'sm-watch2-top10' 갱신 (관찰2 전용, fetchWatch2Signals와 동일 패턴)
+function fetchWatch2Top10() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  fetch(`${base}/api/watch2/top10`, { headers:{'ngrok-skip-browser-warning':'1'} })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { if (Array.isArray(d) && d.length) { localStorage.setItem('sm-watch2-top10', JSON.stringify(d)); renderWatchlist(); } })
+    .catch(() => {});
+}
+
 function syncWatch2Meta() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
   const meta = {};
@@ -7099,6 +7146,7 @@ function startRealtimeSSE() {
       // 관심종목 종목코드 등록 + watch2 신호 갱신
       registerWatchlistToSSE();
       fetchWatch2Signals();
+      fetchWatch2Top10();
       syncWatch2Meta();
     };
 
@@ -7131,6 +7179,7 @@ function startRealtimeSSE() {
         // watch2 배치(08:50 등) 완료 직후 서버가 능동 push → 재접속 없이 즉시 갱신
         if (data.type === 'watch2signals' && data.signals) {
           localStorage.setItem('sm-watch2-signals', JSON.stringify(data.signals));
+          if (Array.isArray(data.top10)) localStorage.setItem('sm-watch2-top10', JSON.stringify(data.top10));
           renderWatchlist();
         }
       } catch(err) {
@@ -7373,6 +7422,7 @@ setTimeout(async () => {
     setTimeout(syncSubscribedCodes, 2000);
     // watch2 신호 폴백 폴링: SSE push를 놓치거나 연결이 끊겨도 5분마다 최신 상태로 보정
     setInterval(fetchWatch2Signals, 5 * 60 * 1000);
+    setInterval(fetchWatch2Top10, 5 * 60 * 1000);
   }
 }, 1000);
 
