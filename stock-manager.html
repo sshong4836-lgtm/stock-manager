@@ -7097,10 +7097,19 @@ function fetchWatch2Signals() {
 // "오늘의 핵심관찰 TOP10" fetch → localStorage 'sm-watch2-top10' 갱신 (관찰2 전용, fetchWatch2Signals와 동일 패턴)
 function fetchWatch2Top10() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  console.log(`[watch2Top10] 폴링 실행 ${new Date().toLocaleTimeString()}`);
   fetch(`${base}/api/watch2/top10`, { headers:{'ngrok-skip-browser-warning':'1'} })
     .then(r => r.ok ? r.json() : null)
-    .then(d => { if (Array.isArray(d) && d.length) { localStorage.setItem('sm-watch2-top10', JSON.stringify(d)); renderWatchlist(); } })
-    .catch(() => {});
+    .then(d => {
+      if (Array.isArray(d) && d.length) {
+        localStorage.setItem('sm-watch2-top10', JSON.stringify(d));
+        renderWatchlist();
+        console.log(`[watch2Top10] 갱신 완료 — 1위: ${d[0].name} (score ${d[0].score.toFixed(1)})`);
+      } else {
+        console.log('[watch2Top10] 응답 비어있음 (배치 미실행 또는 watch2 종목 없음)');
+      }
+    })
+    .catch(err => console.log('[watch2Top10] 폴링 실패:', err.message));
 }
 
 function syncWatch2Meta() {
