@@ -918,7 +918,7 @@
 
   <!-- 일별 스냅샷 히스토리 (전체 합산) -->
   <div class="card" style="margin-bottom:8px">
-    <div class="card-title" style="margin:0 0 8px">일별 스냅샷 히스토리</div>
+    <div class="card-title" style="margin:0 0 8px">일별 스냅샷 히스토리 <span id="etf-daily-history-count" style="font-size:12px;font-weight:400;color:var(--muted)"></span></div>
     <div id="etf-daily-history"><div class="empty" style="padding:16px">ETF 탭을 열면 표시됩니다.</div></div>
   </div>
 
@@ -3889,6 +3889,9 @@ async function etfAutoFetch() {
 }
 
 // ── 일별 스냅샷 히스토리 (전체 합산) ──
+let etfDailyHistoryRows     = [];
+let etfDailyHistoryExpanded = false;
+
 async function renderEtfDailyHistory() {
   const el = document.getElementById('etf-daily-history');
   if (!el) return;
@@ -3896,34 +3899,56 @@ async function renderEtfDailyHistory() {
     const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
     const res = await fetch(`${base}/api/etf/daily-history?account=TOTAL`);
     if (!res.ok) throw new Error('res not ok');
-    const rows = (await res.json()).sort((a, b) => b.date.localeCompare(a.date));
-
-    if (!rows.length) {
-      el.innerHTML = `<div class="empty" style="padding:16px">저장된 스냅샷이 없습니다.</div>`;
-      return;
-    }
-
-    el.innerHTML = `
-      <table class="acct-summary-table">
-        <thead><tr>
-          <th>날짜</th><th class="text-right">총 투자금</th>
-          <th class="text-right">총 평가금액</th><th class="text-right">평가손익</th>
-          <th class="text-right">수익률</th>
-        </tr></thead>
-        <tbody>
-          ${rows.map(r => `<tr>
-            <td style="font-weight:600">${r.date}</td>
-            <td class="text-right text-muted">${fmt(r.invest)}원</td>
-            <td class="text-right">${fmt(r.val)}원</td>
-            <td class="text-right ${cc(r.pl)}" style="font-weight:600">${sign(r.pl)}${fmt(r.pl)}원</td>
-            <td class="text-right ${cc(r.pl_pct)}" style="font-weight:600">${sign(r.pl_pct)}${fmtF(r.pl_pct,2)}%</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>`;
+    etfDailyHistoryRows     = (await res.json()).sort((a, b) => b.date.localeCompare(a.date));
+    etfDailyHistoryExpanded = false;
+    renderEtfDailyHistoryTable();
   } catch (e) {
     console.warn('ETF 일별 스냅샷 히스토리 로드 실패:', e.message);
     el.innerHTML = `<div class="empty" style="padding:16px">불러오기 실패</div>`;
   }
+}
+
+function renderEtfDailyHistoryTable() {
+  const el       = document.getElementById('etf-daily-history');
+  const countEl  = document.getElementById('etf-daily-history-count');
+  const rows     = etfDailyHistoryRows;
+  if (!el) return;
+
+  countEl.textContent = rows.length ? `(총 ${rows.length}일)` : '';
+
+  if (!rows.length) {
+    el.innerHTML = `<div class="empty" style="padding:16px">저장된 스냅샷이 없습니다.</div>`;
+    return;
+  }
+
+  const shown = etfDailyHistoryExpanded ? rows : rows.slice(0, 1);
+
+  el.innerHTML = `
+    <table class="acct-summary-table">
+      <thead><tr>
+        <th>날짜</th><th class="text-right">총 투자금</th>
+        <th class="text-right">총 평가금액</th><th class="text-right">평가손익</th>
+        <th class="text-right">수익률</th>
+      </tr></thead>
+      <tbody>
+        ${shown.map(r => `<tr>
+          <td style="font-weight:600">${r.date}</td>
+          <td class="text-right text-muted">${fmt(r.invest)}원</td>
+          <td class="text-right">${fmt(r.val)}원</td>
+          <td class="text-right ${cc(r.pl)}" style="font-weight:600">${sign(r.pl)}${fmt(r.pl)}원</td>
+          <td class="text-right ${cc(r.pl_pct)}" style="font-weight:600">${sign(r.pl_pct)}${fmtF(r.pl_pct,2)}%</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    ${rows.length > 1 ? `
+      <div style="text-align:center;margin-top:6px">
+        <button class="btn btn-ghost btn-sm" onclick="toggleEtfDailyHistory()">${etfDailyHistoryExpanded ? '접기 ▲' : '이전 기록 더보기 ▼'}</button>
+      </div>` : ''}`;
+}
+
+function toggleEtfDailyHistory() {
+  etfDailyHistoryExpanded = !etfDailyHistoryExpanded;
+  renderEtfDailyHistoryTable();
 }
 
 // ── 전체 계좌 합산 요약 ──
