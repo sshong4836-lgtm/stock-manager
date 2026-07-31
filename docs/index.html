@@ -957,7 +957,10 @@
 
   <!-- 전체 계좌 합산 요약 -->
   <div class="card" style="border-color:var(--orange)">
-    <div class="card-title" style="color:var(--orange)">전체 계좌 합산 요약</div>
+    <div class="section-header" style="margin-bottom:8px">
+      <div class="card-title" style="color:var(--orange);margin:0">전체 계좌 합산 요약</div>
+      <button id="etf-fetch-all-btn" class="btn btn-primary btn-sm no-print" onclick="fetchAllEtfPrices()">🔄 전체 시세 가져오기</button>
+    </div>
     <div id="etf-acct-summary"><div class="empty" style="padding:16px">ETF매매 탭을 열면 표시됩니다.</div></div>
   </div>
 
@@ -3130,21 +3133,13 @@ function resolveTickerCode(stock) {
 }
 
 // ── ETF 탭 현재가 일괄 조회 (키움 API) ──
-async function fetchEtfPrices(acctId) {
-  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
-    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
-  }
-
+// 계좌 1개의 보유종목 현재가를 키움 API로 조회해 etfAcctD에 반영 (조회+재시도 핵심 로직).
+// fetchEtfPrices(개별 계좌 버튼)와 fetchAllEtfPrices(전체 시세 가져오기)가 공용으로 사용.
+async function _fetchOneEtfAccountPrices(acctId, onStatus) {
   const hMap    = calcEtfH(acctId);
   const holdings = Object.entries(hMap).filter(([,h]) => h.qty > 0.0001).map(([s]) => s);
   const targets  = holdings.filter(s => resolveTickerCode(s));
-  if (!targets.length) {
-    toast('종목코드가 없습니다. 종목코드를 입력하거나 내장 사전에 없는 종목명인지 확인하세요.', 'red');
-    return;
-  }
-
-  const btn = document.getElementById('etf-fetch-btn-' + acctId);
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
+  if (!targets.length) return { successList: [], fail: [], targets };
 
   let successList = [], retryQueue = [];
   for (const stock of targets) {
@@ -3167,7 +3162,7 @@ async function fetchEtfPrices(acctId) {
   // 실패 종목 재시도 (2초 대기 후 1회)
   let fail = [];
   if (retryQueue.length) {
-    if (btn) btn.textContent = '⏳ 재시도 중...';
+    if (onStatus) onStatus('⏳ 재시도 중...');
     await new Promise(r => setTimeout(r, 2000));
     for (const { stock, ticker, kiwoomCode } of retryQueue) {
       try {
@@ -3184,6 +3179,27 @@ async function fetchEtfPrices(acctId) {
     }
   }
 
+  return { successList, fail, targets };
+}
+
+async function fetchEtfPrices(acctId) {
+  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
+    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
+  }
+
+  const hMap    = calcEtfH(acctId);
+  const holdings = Object.entries(hMap).filter(([,h]) => h.qty > 0.0001).map(([s]) => s);
+  const targets  = holdings.filter(s => resolveTickerCode(s));
+  if (!targets.length) {
+    toast('종목코드가 없습니다. 종목코드를 입력하거나 내장 사전에 없는 종목명인지 확인하세요.', 'red');
+    return;
+  }
+
+  const btn = document.getElementById('etf-fetch-btn-' + acctId);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 조회 중...'; }
+
+  const { successList, fail } = await _fetchOneEtfAccountPrices(acctId, (msg) => { if (btn) btn.textContent = msg; });
+
   if (btn) { btn.disabled = false; btn.textContent = '🔄 시세 가져오기'; }
 
   renderEtfAcctTab(acctId);
@@ -3192,6 +3208,32 @@ async function fetchEtfPrices(acctId) {
   if (openWrap && openWrap.style.display !== 'none') renderEtfHoldingsTable();
 
   showPriceResultModal(successList, fail, true);
+}
+
+// ── ETF매매 탭 "전체 시세 가져오기": 5개 계좌를 순회하며 조회 후 합산 요약 재계산 ──
+async function fetchAllEtfPrices() {
+  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
+    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
+  }
+
+  const btn = document.getElementById('etf-fetch-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 전체 조회 중...'; }
+
+  let allSuccess = [], allFail = [];
+  for (const acct of ETF_ACCOUNTS) {
+    const { successList, fail } = await _fetchOneEtfAccountPrices(acct.id, (msg) => { if (btn) btn.textContent = `${acct.label} ${msg}`; });
+    allSuccess.push(...successList);
+    allFail.push(...fail);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 전체 시세 가져오기'; }
+
+  renderEtfAllSummary();
+  ETF_ACCOUNTS.forEach(a => renderEtfAcctTab(a.id));
+  const openWrap = document.getElementById('etf-holdings-wrap');
+  if (openWrap && openWrap.style.display !== 'none') renderEtfHoldingsTable();
+
+  showPriceResultModal(allSuccess, allFail, true);
 }
 
 // ── 포트폴리오 탭 현재가 일괄 조회 ──
