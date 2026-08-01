@@ -4850,7 +4850,7 @@ function renderWatchlist() {
 
       w2SigBadges = [
         ['alertRsiOversold','📈RSI'],
-        ['alertVolume',     '📊거래량'],
+        ['alertVolume',     _w2ss.volumeRatio ? `📊거래량 (${_w2ss.volumeRatio.toFixed(1)}배)` : '📊거래량'],
         ['alertBullish',    '🕯양봉'],
         ['alertGoldenCross','🌟골든X'],
         ['alertMaAlignment','📐정배열'],
