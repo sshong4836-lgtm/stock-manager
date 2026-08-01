@@ -89,6 +89,27 @@
     #home-weather-card { display:flex; flex-direction:column; }
     #home-weather { flex:1; display:flex; flex-direction:column; justify-content:space-evenly; color:var(--text); }
 
+    /* 홈 탭 리스크 TOP10 */
+    .risk-row { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .risk-row:last-child { border-bottom:none; }
+    .risk-rank { flex-shrink:0; width:22px; text-align:center; font-weight:700; color:var(--muted); font-size:13px; }
+    .risk-body { flex:1; min-width:0; }
+    .risk-name { font-size:13px; font-weight:600; }
+    .risk-reason { font-size:11.5px; color:var(--muted); margin-top:2px; }
+    .risk-score-wrap { flex-shrink:0; display:flex; align-items:center; gap:4px; }
+    .risk-score-badge { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:8px; font-weight:700; font-size:14px; }
+    .risk-score-low  { background:rgba(63,185,80,.15);  color:var(--green); }
+    .risk-score-mid  { background:rgba(227,179,65,.15); color:var(--yellow); }
+    .risk-score-high { background:rgba(248,81,73,.15);  color:var(--red); }
+    .risk-trend-up   { color:var(--red);   font-size:11px; }
+    .risk-trend-down { color:var(--green); font-size:11px; }
+    .risk-actions { flex-shrink:0; display:flex; gap:4px; }
+    .risk-actions .btn-sm { padding:3px 8px; font-size:11px; }
+    .risk-status-approved { font-size:11px; color:var(--green); flex-shrink:0; white-space:nowrap; }
+    .risk-edit-form { flex-shrink:0; display:flex; align-items:center; gap:4px; }
+    .risk-edit-form input[type=number] { width:44px; padding:3px; text-align:center; }
+    .risk-edit-form input[type=text] { width:120px; padding:3px 6px; font-size:11px; }
+
     /* ── Form ── */
     .form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:12px; }
     .form-group { display:flex; flex-direction:column; gap:5px; }
@@ -519,6 +540,16 @@
         <div class="stat-card"><div class="stat-label">불러오는 중</div><div class="stat-value text-muted">-</div></div>
       </div>
     </div>
+  </div>
+  <div class="card" id="home-risk-card">
+    <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>🚨 리스크 순위 TOP10</span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <span id="risk-date" class="text-muted" style="font-size:11px"></span>
+        <button class="btn btn-sm" onclick="loadRiskCard()">🔄</button>
+      </span>
+    </div>
+    <div id="risk-list">불러오는 중...</div>
   </div>
   <div class="card" id="home-dart-pipeline-card">
     <div class="sub-tabs" style="margin-bottom:14px">
@@ -1909,6 +1940,141 @@ function loadHomeTab() {
   loadHomeIndices();
   loadHomeDart();
   loadHomePipeline();
+  loadRiskCard();
+}
+
+// ══════════════════════════════
+//   홈 탭 : 리스크 순위 TOP10
+// ══════════════════════════════
+function riskScoreClass(score) {
+  if (score <= 3) return 'risk-score-low';
+  if (score <= 6) return 'risk-score-mid';
+  return 'risk-score-high';
+}
+
+function riskTrendHtml(score, anchorScore) {
+  if (anchorScore === null || anchorScore === undefined || score === anchorScore) return '';
+  const diff = score - anchorScore;
+  return diff > 0
+    ? `<span class="risk-trend-up">▲${diff}</span>`
+    : `<span class="risk-trend-down">▼${Math.abs(diff)}</span>`;
+}
+
+function riskActionsHtml(f) {
+  const row = f.row;
+  if (!row) return '<span class="text-muted" style="font-size:11px">미분석</span>';
+  if (row.status === 'approved' || row.status === 'edited') {
+    return `<span class="risk-status-approved">${row.status === 'edited' ? '✏️ 수정승인' : '✅ 승인'}</span>`;
+  }
+  return `
+    <div class="risk-actions">
+      <button class="btn btn-sm btn-success" onclick="approveRiskRow(${f.id})">승인</button>
+      <button class="btn btn-sm" onclick="showRiskEditForm(${f.id})">수정</button>
+    </div>`;
+}
+
+function renderRiskCard(data) {
+  const wrap = document.getElementById('risk-list');
+  const dateEl = document.getElementById('risk-date');
+  if (!wrap) return;
+  if (dateEl) dateEl.textContent = data.date || '';
+
+  const allUnanalyzed = data.risks.every(f => !f.row);
+  if (allUnanalyzed) {
+    wrap.innerHTML = `
+      <div style="text-align:center;padding:24px;color:var(--muted)">
+        오늘 아직 분석이 실행되지 않았습니다. (매일 08:50 자동 실행)
+        <div style="margin-top:10px"><button class="btn btn-sm" onclick="runRiskAnalyzeNow()">지금 분석 실행</button></div>
+      </div>`;
+    return;
+  }
+
+  wrap.innerHTML = data.risks.map(f => {
+    const row = f.row;
+    const score = row ? (row.final_score !== null && row.final_score !== undefined ? row.final_score : row.proposed_score) : null;
+    const reason = row ? (row.final_reason || row.proposed_reason) : '아직 분석되지 않음';
+    const anchorScore = f.anchor ? f.anchor.final_score : null;
+    return `
+    <div class="risk-row" data-risk-id="${f.id}">
+      <div class="risk-rank">${f.rank}</div>
+      <div class="risk-body">
+        <div class="risk-name">${f.name}</div>
+        <div class="risk-reason">${reason}</div>
+      </div>
+      <div class="risk-score-wrap">
+        ${score !== null ? `<span class="risk-score-badge ${riskScoreClass(score)}">${score}</span>${riskTrendHtml(score, anchorScore)}` : '<span class="text-muted">-</span>'}
+      </div>
+      ${riskActionsHtml(f)}
+    </div>`;
+  }).join('');
+}
+
+async function loadRiskCard() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  try {
+    const res = await fetch(`${base}/api/risk/today`);
+    const data = await res.json();
+    renderRiskCard(data);
+  } catch (e) {
+    const wrap = document.getElementById('risk-list');
+    if (wrap) wrap.innerHTML = `<div class="text-red" style="text-align:center;padding:24px">로딩 실패: ${e.message}</div>`;
+  }
+}
+
+async function runRiskAnalyzeNow() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  const wrap = document.getElementById('risk-list');
+  if (wrap) wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">분석 중... (약 20~30초 소요, 잠시 후 새로고침 해주세요)</div>';
+  try {
+    await fetch(`${base}/api/risk/analyze`, { method: 'POST' });
+    setTimeout(loadRiskCard, 25000);
+  } catch (e) {
+    if (wrap) wrap.innerHTML = `<div class="text-red" style="text-align:center;padding:24px">실행 실패: ${e.message}</div>`;
+  }
+}
+
+async function approveRiskRow(riskId, score, reason) {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  const body = { risk_id: riskId };
+  if (score !== undefined) body.score = score;
+  if (reason !== undefined) body.reason = reason;
+  try {
+    const res = await fetch(`${base}/api/risk/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { const err = await res.json(); alert('승인 실패: ' + (err.error || res.status)); return; }
+    loadRiskCard();
+  } catch (e) {
+    alert('승인 실패: ' + e.message);
+  }
+}
+
+function showRiskEditForm(riskId) {
+  const row = document.querySelector(`.risk-row[data-risk-id="${riskId}"]`);
+  if (!row) return;
+  const scoreEl = row.querySelector('.risk-score-badge');
+  const reasonEl = row.querySelector('.risk-reason');
+  const curScore = scoreEl ? scoreEl.textContent.trim() : '';
+  const curReason = reasonEl ? reasonEl.textContent.trim() : '';
+  const actionsEl = row.querySelector('.risk-actions') || row.lastElementChild;
+  actionsEl.outerHTML = `
+    <div class="risk-edit-form">
+      <input type="number" min="1" max="10" id="risk-edit-score-${riskId}" value="${curScore}">
+      <input type="text" id="risk-edit-reason-${riskId}" value="${curReason.replace(/"/g,'&quot;')}">
+      <button class="btn btn-sm btn-success" onclick="submitRiskEdit(${riskId})">확인</button>
+      <button class="btn btn-sm" onclick="loadRiskCard()">취소</button>
+    </div>`;
+}
+
+function submitRiskEdit(riskId) {
+  const scoreInput = document.getElementById(`risk-edit-score-${riskId}`);
+  const reasonInput = document.getElementById(`risk-edit-reason-${riskId}`);
+  const score = parseInt(scoreInput.value, 10);
+  const reason = reasonInput.value.trim();
+  if (!score || score < 1 || score > 10) { alert('점수는 1~10 사이 정수여야 합니다.'); return; }
+  approveRiskRow(riskId, score, reason);
 }
 
 function switchHomeSubTab(btn, name) {
@@ -7796,7 +7962,8 @@ async function loadNewsTab() {
   wrap.innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px">로딩 중...</div>';
   try {
     const res = await fetch(`${base}/api/news?limit=9999${qs}`);
-    _newsAllData = await res.json();
+    // naver_news(리스크 트래커 9~10번 수집용)는 종목 관련 뉴스가 아니므로 종목뉴스 탭에서 제외
+    _newsAllData = (await res.json()).filter(n => n.channel !== 'naver_news');
     _renderNewsStockBar();
     _renderNewsCards();
   } catch(e) {
