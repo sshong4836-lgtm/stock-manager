@@ -3797,7 +3797,7 @@ function renderEtfHoldingsTable() {
                   onchange="saveEtfExtra('${safeKey}','nav',this.value)"
                   style="width:72px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:13px;text-align:right">
                 <button onclick="fetchEtfNav('${escAttr(name)}','${safeKey}',this)"
-                  title="키움 API에서 NAV 자동 조회 (ka40009)"
+                  title="키움 API에서 NAV 자동 조회 (ka40003)"
                   style="background:rgba(88,166,255,.15);color:var(--blue);border:1px solid rgba(88,166,255,.4);border-radius:4px;padding:3px 6px;font-size:11px;cursor:pointer;flex-shrink:0">📡</button>
               </div>
             </td>
@@ -3834,7 +3834,28 @@ function saveEtfExtra(key, field, value) {
   renderEtfHoldingsTable();
 }
 
-// ── ETF NAV 단일 조회 (ka40009) ──
+// ka40009(ETF시간대별체결요청)의 nav 필드는 실사용 시 상시 빈 문자열이라, 대신 쓰던 base_pric은
+// "오늘 NAV"가 아니라 "전일 기준가"였음 — 평소엔 하루 변동폭이 작아 티가 안 나다가, 기초자산이
+// 크게 움직인 날 화면 NAV가 실제 NAV와 20%+ 벌어지는 버그로 발각됨. ka40003(ETF일별추이요청)의
+// nav 필드는 실측 검증 결과(0177R0, 2026-07-31) KB증권 고시 NAV(10,688.56원)와 소수점까지 일치.
+// ── ETF NAV 조회 공용 함수 (ka40003) ──
+async function _fetchEtfNavKa40003(kiwoomCode) {
+  const res = await _kiwoomFetch('/api/dostk/etf', {
+    method: 'POST',
+    headers: { 'api-id': 'ka40003', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stk_cd: kiwoomCode })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  const arr = json?.etfdaly_trnsn;
+  if (!arr?.length) throw new Error(json?.return_msg || 'NAV 데이터 없음');
+  // 휴장일 등으로 nav가 "0.00"/빈 값인 자리가 섞여 있을 수 있어, 유효한 값이 있는 최신 항목을 찾는다.
+  const row = arr.find(r => r.nav && parseFloat(r.nav) !== 0);
+  if (!row) throw new Error('유효한 NAV 값 없음');
+  return { nav: parseFloat(String(row.nav).replace(/^[+-]/, '')), date: row.cntr_dt };
+}
+
+// ── ETF NAV 단일 조회 (ka40003) ──
 async function fetchEtfNav(stockName, safeKey, btnEl) {
   if (!kiwoomSettings.proxyUrl) { toast('설정 탭에서 프록시 URL을 먼저 입력하세요.', 'red'); return; }
   const ticker = resolveTickerCode(stockName);
@@ -3845,23 +3866,9 @@ async function fetchEtfNav(stockName, safeKey, btnEl) {
   }
   if (btnEl) { btnEl.disabled = true; btnEl.textContent = '⏳'; }
   try {
-    const res = await _kiwoomFetch('/api/dostk/etf', {
-      method: 'POST',
-      headers: { 'api-id': 'ka40009', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stk_cd: kiwoomCode })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    const arr = json?.etfnavarray;
-    if (!arr?.length) throw new Error(json?.return_msg || 'NAV 데이터 없음');
-    const latest = arr[0];
-    // 실시간 NAV 우선, 없으면 전일 기준가(=전일 NAV)
-    const navRaw = (latest.nav && latest.nav !== '') ? latest.nav : latest.base_pric;
-    const nav = parseFloat(String(navRaw).replace(/^[+-]/, ''));
-    if (!nav || isNaN(nav)) throw new Error('NAV 값 없음');
-    const isRealtime = !!(latest.nav && latest.nav !== '');
+    const { nav, date } = await _fetchEtfNavKa40003(kiwoomCode);
     saveEtfExtra(safeKey, 'nav', nav);
-    toast(`${stockName} NAV: ${fmt(nav)}원 ${isRealtime ? '(실시간)' : '(전일기준)'}`);
+    toast(`${stockName} NAV: ${fmt(nav)}원 (${date} 기준)`);
   } catch(err) {
     console.error('NAV 조회 실패:', stockName, err.message);
     toast(`${stockName} NAV 조회 실패: ${err.message}`, 'red');
@@ -3893,19 +3900,7 @@ async function etfAutoFetch() {
     const kiwoomCode = _toKiwoomCode(ticker);
     if (!kiwoomCode) { fail++; continue; }
     try {
-      const res = await _kiwoomFetch('/api/dostk/etf', {
-        method: 'POST',
-        headers: { 'api-id': 'ka40009', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stk_cd: kiwoomCode })
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const arr = json?.etfnavarray;
-      if (!arr?.length) throw new Error('NAV 없음');
-      const latest = arr[0];
-      const navRaw = (latest.nav && latest.nav !== '') ? latest.nav : latest.base_pric;
-      const nav = parseFloat(String(navRaw).replace(/^[+-]/, ''));
-      if (!nav || isNaN(nav)) throw new Error('파싱 실패');
+      const { nav } = await _fetchEtfNavKa40003(kiwoomCode);
       saveEtfExtra(safeKey, 'nav', nav);
       ok++;
     } catch(err) {
