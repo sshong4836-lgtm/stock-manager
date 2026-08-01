@@ -496,7 +496,7 @@
   <button class="tab-btn"        onclick="switchTab(this,'etf')">🏦 ETF</button>
   <button class="tab-btn"        onclick="switchTab(this,'etfwatch')">🔍 ETF관찰</button>
   <button class="tab-btn"        onclick="switchTab(this,'alert')">🔔 장시간 알림</button>
-  <button class="tab-btn"        onclick="switchTab(this,'futures')">⚡ 선물동향</button>
+  <button class="tab-btn"        onclick="switchTab(this,'futures')">⚡ 시장동향</button>
   <button class="tab-btn"        onclick="switchTab(this,'daytrade')">⚡ 단타수익</button>
   <button class="tab-btn"        onclick="switchTab(this,'marketcap');loadMarketCap(false)">📈 시총순위</button>
   <button class="tab-btn"        onclick="switchTab(this,'settings')">⚙️ 설정</button>
@@ -1208,9 +1208,39 @@
 </div>
 
 <!-- ══════════════════════════════
-     TAB 10 : 선물동향
+     TAB 10 : 시장동향
 ══════════════════════════════ -->
 <div id="tab-futures" class="tab-content">
+
+  <!-- 업종별 투자자 매매동향 -->
+  <div class="card">
+    <div class="section-header">
+      <div class="card-title" style="margin:0">📊 업종별 투자자 매매동향 <span id="si-date-label" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>
+      <button class="btn btn-ghost btn-sm" onclick="loadSectorInvestor()">🔄 새로고침</button>
+    </div>
+    <div class="info-note">단위: 억원. 매 영업일 15:40 자동 수집됩니다.</div>
+
+    <div id="si-totals-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0"></div>
+
+    <div class="mc-sub-tabs" style="margin-top:6px">
+      <button class="mc-sub-btn active" id="si-btn-kospi" onclick="switchSiMarket('kospi')">🔵 코스피 업종별</button>
+      <button class="mc-sub-btn"        id="si-btn-kosdaq" onclick="switchSiMarket('kosdaq')">🟢 코스닥 업종별</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>업종명</th>
+          <th class="text-right">개인</th>
+          <th class="text-right">외국인</th>
+          <th class="text-right">기관계</th>
+          <th class="text-right">연기금</th>
+          <th class="text-right">사모펀드</th>
+        </tr></thead>
+        <tbody id="si-tbody"><tr><td colspan="6" class="empty">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- 입력 폼 -->
   <div class="card">
@@ -1324,36 +1354,6 @@
           <tbody id="ft-tbody"></tbody>
         </table>
       </div>
-    </div>
-  </div>
-
-  <!-- 업종별 투자자 매매동향 -->
-  <div class="card">
-    <div class="section-header">
-      <div class="card-title" style="margin:0">📊 업종별 투자자 매매동향 <span id="si-date-label" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>
-      <button class="btn btn-ghost btn-sm" onclick="loadSectorInvestor()">🔄 새로고침</button>
-    </div>
-    <div class="info-note">단위: 억원. 매 영업일 15:40 자동 수집됩니다.</div>
-
-    <div id="si-totals-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0"></div>
-
-    <div class="mc-sub-tabs" style="margin-top:6px">
-      <button class="mc-sub-btn active" id="si-btn-kospi" onclick="switchSiMarket('kospi')">🔵 코스피 업종별</button>
-      <button class="mc-sub-btn"        id="si-btn-kosdaq" onclick="switchSiMarket('kosdaq')">🟢 코스닥 업종별</button>
-    </div>
-
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>업종명</th>
-          <th class="text-right">개인</th>
-          <th class="text-right">외국인</th>
-          <th class="text-right">기관계</th>
-          <th class="text-right">연기금</th>
-          <th class="text-right">사모펀드</th>
-        </tr></thead>
-        <tbody id="si-tbody"><tr><td colspan="6" class="empty">불러오는 중...</td></tr></tbody>
-      </table>
     </div>
   </div>
 
@@ -5994,7 +5994,7 @@ function showPriceResultModal(successList, fail, krw = false) {
 // ══════════════════════════════════════════════════════
 // 초기화
 // ══════════════════════════════════════════════════════
-// 선물동향
+// 시장동향 (선물 + 업종별 투자자매매동향)
 // ══════════════════════════════════════════════════════
 const FUTURES_TO_KOSPI = 6.43; // 실측 배율(weekly_ratio)이 없을 때만 쓰는 폴백값
 let futuresChart = null;
@@ -6027,10 +6027,10 @@ async function migrateLegacyFuturesData() {
     localStorage.setItem('sm-futures-backup', legacyRaw);
     localStorage.removeItem('sm-futures');
     localStorage.setItem('sm-futures-migrated', 'true');
-    toast(`선물동향 데이터 ${legacy.length}건을 서버로 마이그레이션했습니다.`, 'green');
-    console.log(`✅ 선물동향 마이그레이션 완료: ${legacy.length}건 (백업: localStorage['sm-futures-backup'])`);
+    toast(`선물 데이터 ${legacy.length}건을 서버로 마이그레이션했습니다.`, 'green');
+    console.log(`✅ 선물 데이터 마이그레이션 완료: ${legacy.length}건 (백업: localStorage['sm-futures-backup'])`);
   } catch (e) {
-    console.log('❌ 선물동향 마이그레이션 실패, 다음 로드 시 재시도합니다:', e.message);
+    console.log('❌ 선물 데이터 마이그레이션 실패, 다음 로드 시 재시도합니다:', e.message);
   }
 }
 
@@ -6373,7 +6373,7 @@ function renderFuturesUI() {
     : '<tr><td colspan="6"><div class="empty">데이터가 없습니다.</div></td></tr>';
 }
 
-// ── 선물동향: 캡처 이미지 자동인식 ──
+// ── 선물 데이터: 캡처 이미지 자동인식 ──
 let ftImagePreview = []; // [{date, upper, lower}]
 let ftImageRefs = [];    // [{futures, kospi}] 이미지에서 인식된 코스피 참고선
 let ftImageRatio = null; // 참고선으로 계산한 이번 주 실측 배율
@@ -6398,7 +6398,7 @@ function handleFtImageSelected(input) {
   readImageFileAndAnalyze(file);
 }
 
-// 선물동향 탭이 활성화된 상태에서 Ctrl+V로 클립보드 이미지를 바로 붙여넣어 분석
+// 시장동향 탭이 활성화된 상태에서 Ctrl+V로 클립보드 이미지를 바로 붙여넣어 분석
 document.addEventListener('paste', (e) => {
   const tab = document.getElementById('tab-futures');
   if (!tab || !tab.classList.contains('active')) return;
