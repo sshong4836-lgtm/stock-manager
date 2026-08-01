@@ -1218,7 +1218,7 @@
       <div class="card-title" style="margin:0">📊 업종별 투자자 매매동향 <span id="si-date-label" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>
       <button class="btn btn-ghost btn-sm" onclick="loadSectorInvestor()">🔄 새로고침</button>
     </div>
-    <div class="info-note">단위: 억원. 매 영업일 15:40 자동 수집됩니다.</div>
+    <div class="info-note">단위: 억원 · 표시된 날짜 하루 동안의 순매수입니다 (여러 날 누적 아님). 매 영업일 15:40 자동 수집됩니다.</div>
 
     <div id="si-totals-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0"></div>
 
@@ -6150,7 +6150,7 @@ function renderSiTotals() {
     wrap.innerHTML = `<div class="empty" style="padding:16px">아직 수집된 데이터가 없습니다. 장마감(15:40) 이후 자동 수집되거나, 서버에서 수동 실행할 수 있습니다.</div>`;
     return;
   }
-  label.textContent = `(${sectorInvestorData.date} 기준, 단위: 억원)`;
+  label.textContent = `(${sectorInvestorData.date} 하루 기준, 단위: 억원)`;
   const mkCard = (label, t) => {
     if (!t) return '';
     return `
