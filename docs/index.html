@@ -1327,6 +1327,36 @@
     </div>
   </div>
 
+  <!-- 업종별 투자자 매매동향 -->
+  <div class="card">
+    <div class="section-header">
+      <div class="card-title" style="margin:0">📊 업종별 투자자 매매동향 <span id="si-date-label" style="font-size:11px;color:var(--muted);font-weight:400"></span></div>
+      <button class="btn btn-ghost btn-sm" onclick="loadSectorInvestor()">🔄 새로고침</button>
+    </div>
+    <div class="info-note">단위: 억원. 매 영업일 15:40 자동 수집됩니다.</div>
+
+    <div id="si-totals-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:10px 0"></div>
+
+    <div class="mc-sub-tabs" style="margin-top:6px">
+      <button class="mc-sub-btn active" id="si-btn-kospi" onclick="switchSiMarket('kospi')">🔵 코스피 업종별</button>
+      <button class="mc-sub-btn"        id="si-btn-kosdaq" onclick="switchSiMarket('kosdaq')">🟢 코스닥 업종별</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>업종명</th>
+          <th class="text-right">개인</th>
+          <th class="text-right">외국인</th>
+          <th class="text-right">기관계</th>
+          <th class="text-right">연기금</th>
+          <th class="text-right">사모펀드</th>
+        </tr></thead>
+        <tbody id="si-tbody"><tr><td colspan="6" class="empty">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 
 <!-- ══════════════════════════════
@@ -1861,7 +1891,7 @@ function switchTab(btn, name) {
   }
   if (name === 'etfmgmt')  renderEtfTradeTab();
   if (name === 'daytrade') renderDayTrade();
-  if (name === 'futures')  renderFutures();
+  if (name === 'futures')  { renderFutures(); loadSectorInvestor(); }
   if (name === 'etfwatch') renderEtfWatch();
   if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); loadBackupList('watchlist'); loadBackupList('etf'); }
   if (name === 'news')     loadNewsTab();
@@ -6079,6 +6109,81 @@ async function renderFutures() {
     toast(`선물 데이터 로드 실패: ${e.message}`, 'red');
   }
   renderFuturesUI();
+}
+
+// ── 업종별 투자자 매매동향 (ka10051, 매 영업일 15:40 서버 자동수집) ──
+let sectorInvestorData = { date: null, kospi: null, kosdaq: null };
+let _siMarket = 'kospi';
+
+function switchSiMarket(m) {
+  _siMarket = m;
+  document.getElementById('si-btn-kospi').classList.toggle('active', m === 'kospi');
+  document.getElementById('si-btn-kosdaq').classList.toggle('active', m === 'kosdaq');
+  renderSiTable();
+}
+
+async function loadSectorInvestor() {
+  try {
+    const res = await fetch(`${futuresApiBase()}/api/sector-investor`);
+    if (!res.ok) throw new Error(`서버 오류(${res.status})`);
+    sectorInvestorData = await res.json();
+  } catch (e) {
+    console.log('❌ 업종별 투자자매매동향 로드 실패:', e.message);
+    sectorInvestorData = { date: null, kospi: null, kosdaq: null };
+  }
+  renderSiTotals();
+  renderSiTable();
+}
+
+function _siAmt(v) {
+  const n = Number(v) || 0;
+  const color = n > 0 ? 'var(--red)' : n < 0 ? 'var(--blue)' : 'var(--muted)';
+  const sign  = n > 0 ? '+' : '';
+  return `<b style="color:${color}">${sign}${fmt(Math.round(n))}</b>`;
+}
+
+function renderSiTotals() {
+  const wrap = document.getElementById('si-totals-wrap');
+  const label = document.getElementById('si-date-label');
+  if (!sectorInvestorData?.date) {
+    label.textContent = '';
+    wrap.innerHTML = `<div class="empty" style="padding:16px">아직 수집된 데이터가 없습니다. 장마감(15:40) 이후 자동 수집되거나, 서버에서 수동 실행할 수 있습니다.</div>`;
+    return;
+  }
+  label.textContent = `(${sectorInvestorData.date} 기준, 단위: 억원)`;
+  const mkCard = (label, t) => {
+    if (!t) return '';
+    return `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg3)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">${label} 전체</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px 14px;font-size:12px">
+        <span>개인 ${_siAmt(t.individual)}</span>
+        <span>외국인 ${_siAmt(t.foreign_inv)}</span>
+        <span>기관계 ${_siAmt(t.institution)}</span>
+        <span>연기금 ${_siAmt(t.pension)}</span>
+        <span>사모펀드 ${_siAmt(t.pef)}</span>
+      </div>
+    </div>`;
+  };
+  wrap.innerHTML = mkCard('🔵 코스피', sectorInvestorData.kospi?.total) + mkCard('🟢 코스닥', sectorInvestorData.kosdaq?.total);
+}
+
+function renderSiTable() {
+  const tbody = document.getElementById('si-tbody');
+  const group = sectorInvestorData?.[_siMarket];
+  if (!group || !group.sectors?.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = group.sectors.map(s => `
+    <tr>
+      <td>${escHtml(s.sector_name)}</td>
+      <td class="text-right">${_siAmt(s.individual)}</td>
+      <td class="text-right">${_siAmt(s.foreign_inv)}</td>
+      <td class="text-right">${_siAmt(s.institution)}</td>
+      <td class="text-right">${_siAmt(s.pension)}</td>
+      <td class="text-right">${_siAmt(s.pef)}</td>
+    </tr>`).join('');
 }
 
 function renderFuturesUI() {
