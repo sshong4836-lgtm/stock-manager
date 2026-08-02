@@ -549,6 +549,11 @@
         <button class="btn btn-sm" onclick="loadRiskCard()">🔄</button>
       </span>
     </div>
+    <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:10px;padding:8px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted)">
+      <div><span class="risk-score-badge risk-score-low" style="width:22px;height:22px;font-size:11px;vertical-align:middle;margin-right:6px">1-3</span>낮음 — 특별한 조치 불필요, 평소처럼 관찰</div>
+      <div><span class="risk-score-badge risk-score-mid" style="width:22px;height:22px;font-size:11px;vertical-align:middle;margin-right:6px">4-6</span>중간 — 관련 종목/자산 비중 점검, 뉴스 주기적 확인</div>
+      <div><span class="risk-score-badge risk-score-high" style="width:22px;height:22px;font-size:11px;vertical-align:middle;margin-right:6px">7-10</span>높음 — 관련 노출 종목 리스크 재검토, 필요시 비중 축소 검토</div>
+    </div>
     <div id="risk-list">불러오는 중...</div>
   </div>
   <div class="card" id="home-dart-pipeline-card">
