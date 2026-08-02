@@ -1965,6 +1965,21 @@ function riskTrendHtml(score, anchorScore) {
     : `<span class="risk-trend-down">▼${Math.abs(diff)}</span>`;
 }
 
+function riskDaysBetween(a, b) {
+  return Math.round((new Date(b) - new Date(a)) / 86400000);
+}
+
+// 마지막 승인일 기준으로 며칠째 미승인 상태인지 표시. 1일(오늘 것만 아직
+// 안 눌렀을 뿐인 정상 흐름)은 굳이 경고하지 않고, 하루를 통째로 건너뛴
+// 경우(2일 이상)부터만 표시한다.
+function riskStaleBadgeHtml(anchor, todayDate) {
+  if (!anchor) return '';
+  const days = riskDaysBetween(anchor.date, todayDate);
+  if (days < 2) return '';
+  const color = days >= 5 ? 'var(--red)' : 'var(--yellow)';
+  return `<div style="font-size:10px;color:${color};margin-top:2px" title="마지막 승인일: ${anchor.date}">⏳ ${days}일째 미승인</div>`;
+}
+
 function riskActionsHtml(f) {
   const row = f.row;
   if (!row) return '<span class="text-muted" style="font-size:11px">미분석</span>';
@@ -1999,12 +2014,14 @@ function renderRiskCard(data) {
     const score = row ? (row.final_score !== null && row.final_score !== undefined ? row.final_score : row.proposed_score) : null;
     const reason = row ? (row.final_reason || row.proposed_reason) : '아직 분석되지 않음';
     const anchorScore = f.anchor ? f.anchor.final_score : null;
+    const staleBadge = (row && row.status === 'pending') ? riskStaleBadgeHtml(f.anchor, data.date) : '';
     return `
     <div class="risk-row" data-risk-id="${f.id}">
       <div class="risk-rank">${f.rank}</div>
       <div class="risk-body">
         <div class="risk-name">${f.name}</div>
         <div class="risk-reason">${reason}</div>
+        ${staleBadge}
       </div>
       <div class="risk-score-wrap">
         ${score !== null ? `<span class="risk-score-badge ${riskScoreClass(score)}">${score}</span>${riskTrendHtml(score, anchorScore)}` : '<span class="text-muted">-</span>'}
