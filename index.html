@@ -2024,10 +2024,11 @@ async function loadRiskCard() {
 async function runRiskAnalyzeNow() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
   const wrap = document.getElementById('risk-list');
-  if (wrap) wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">분석 중... (약 20~30초 소요, 잠시 후 새로고침 해주세요)</div>';
+  if (wrap) wrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">분석 중... (약 20~30초 소요, 완료되면 자동으로 갱신됩니다)</div>';
   try {
     await fetch(`${base}/api/risk/analyze`, { method: 'POST' });
-    setTimeout(loadRiskCard, 25000);
+    // SSE(riskScores)로 완료 즉시 자동 갱신되지만, 연결이 끊겨 있는 경우를 대비한 안전망
+    setTimeout(loadRiskCard, 35000);
   } catch (e) {
     if (wrap) wrap.innerHTML = `<div class="text-red" style="text-align:center;padding:24px">실행 실패: ${e.message}</div>`;
   }
@@ -7569,6 +7570,11 @@ function startRealtimeSSE() {
           localStorage.setItem('sm-watch2-signals', JSON.stringify(data.signals));
           if (Array.isArray(data.top10)) localStorage.setItem('sm-watch2-top10', JSON.stringify(data.top10));
           renderWatchlist();
+        }
+
+        // 리스크 TOP10 분석(수동 실행/08:50 배치/승인) 완료 직후 서버가 능동 push → 새로고침 없이 즉시 갱신
+        if (data.type === 'riskScores' && Array.isArray(data.risks)) {
+          renderRiskCard(data);
         }
       } catch(err) {
         console.log('SSE 파싱 오류:', err.message);
