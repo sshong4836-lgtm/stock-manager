@@ -5079,15 +5079,15 @@ function renderWatchlist() {
       // alertVolume 배지: 매일 08:50 배치의 "전일/그제" 스냅샷이 기본이지만, checkRealtimeVolume이
       // 장중에 실시간 급증을 감지해 텔레그램을 보낼 때 volumeRatioLive 플래그와 함께 이 값을 즉시
       // 덮어쓴다 — 그 상태를 "실시간"으로 별도 표시해 스냅샷과 헷갈리지 않게 한다.
-      // (volumeRatioLive는 다음날 08:50 배치가 latestWatch2Signals[code]를 통째로 새로 쓰면서
-      // 자동으로 사라지고 다시 스냅샷 표시로 돌아간다.)
+      // (volumeRatioLive는 17:50 또는 다음날 08:50 배치가 latestWatch2Signals[code]를 통째로
+      // 새로 쓰면서 자동으로 사라지고 다시 스냅샷 표시로 돌아간다.)
       const _isLiveVol = !!_w2ss.volumeRatioLive;
       const _volLabel = _w2ss.volumeRatio
         ? (_isLiveVol ? `⚡실시간(${_w2ss.volumeRatio.toFixed(1)}배)` : `📊전일 대비(${_w2ss.volumeRatio.toFixed(1)}배)`)
         : '📊전일 대비';
       const _volTitle = _isLiveVol
-        ? '당일 실시간 누적거래량 ÷ 전일 거래량 — 텔레그램 실시간 감지 시점 기준 (다음날 08:50 정규 배치 전까지 유지, 이후 전일 대비 스냅샷으로 교체됨)'
-        : '전일 거래량 ÷ 그제 거래량 — 매일 08:50 장 시작 전 기준 스냅샷 (장중 실시간 거래량과는 다름)';
+        ? '당일 실시간 누적거래량 ÷ 전일 거래량 — 텔레그램 실시간 감지 시점 기준 (그날 17:50 또는 다음날 08:50 정규 배치가 돌면 전일 대비 스냅샷으로 교체됨)'
+        : '전일 대비 거래량 배수 — 매일 17:50 장 마감 후(당일vs전일, 메인) 및 08:50 장 시작 전(전일vs전전일, 안전망) 배치 스냅샷 (장중 실시간 거래량과는 다름)';
       const _volColor = _isLiveVol ? { bg:'rgba(240,136,62,.18)', fg:'var(--orange)', bd:'rgba(240,136,62,.4)' } : null;
 
       w2SigBadges = [
