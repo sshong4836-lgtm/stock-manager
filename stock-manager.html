@@ -225,6 +225,7 @@
     .wc-bl { flex-shrink:0; width:22px; opacity:.85; }
     .wc-bv { flex-shrink:0; width:68px; font-size:12px; text-align:right; font-variant-numeric:tabular-nums; }
     .wc-badge input  { background:transparent; border:none; outline:none; color:inherit; font:inherit; flex:1; min-width:0; padding:0; text-align:right; }
+    .wc-bps { flex-shrink:0; font-size:10px; color:var(--muted); white-space:nowrap; margin-left:2px; }
     /* 관심종목 추가 폼 입력칸 */
     .w-add-input { border-color:rgba(255,255,255,.22) !important; }
     .w-add-input::placeholder { color:rgba(255,255,255,.38) !important; }
@@ -4843,6 +4844,10 @@ function renderWatchlist() {
   let _watch2SigsCache = {};
   try { _watch2SigsCache = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}'); } catch (e) { _watch2SigsCache = {}; }
 
+  // sm-bps-data: 분기/반기/사업보고서 공시 기준 BPS/PBR (보유종목 인라인 표시 + 관찰2 툴팁/상세패널 공용)
+  let _bpsCache = {};
+  try { _bpsCache = JSON.parse(localStorage.getItem('sm-bps-data') || '{}'); } catch (e) { _bpsCache = {}; }
+
   container.innerHTML = list.map((w, listIdx) => {
     const sig  = w.signal || 'gray';
     const wGrp = normalizeGroup(w.group);
@@ -4853,11 +4858,19 @@ function renderWatchlist() {
     const _w2PeakPlaceholder = (wGrp === 'watch2' && !_w2HasManualPeak && _w2ss.resistancePrice)
       ? `자동: ${fmt(Math.round(_w2ss.resistancePrice))}` : '0';
 
+    // 관찰2 상세패널 전용: BPS/PBR — 기본 화면(요약 배지)엔 안 보이고 ⚙ 상세보기에서만 노출
+    const _w2BpsText = wGrp === 'watch2' ? _bpsText(w.stock, _bpsCache) : null;
+
     // 상세패널 각 필드
     const ea = escAttr, eh = escHtml;
     const detailHtml = `
       <div class="wc-detail" id="wc-detail-${w.id}" style="display:none">
         <div class="wc-detail-grid">
+          ${_w2BpsText ? `
+          <div class="form-group" style="grid-column:1/-1">
+            <label>BPS / PBR <span style="font-size:10px;color:var(--muted)">(분기·반기·사업보고서 기준)</span></label>
+            <div style="padding:5px 0;font-size:13px;font-weight:600;color:var(--text)">${_w2BpsText}</div>
+          </div>` : ''}
           <div class="form-group">
             <label>추세선 고점1 날짜</label>
             <input type="date" value="${ea(w.trendH1Date)}"
@@ -5143,6 +5156,8 @@ function renderWatchlist() {
             return `<span style="color:${color};font-weight:700">${sign}${fmtF(pct,2)}%</span>`;
           })()
         : '';
+      const bpsText = _bpsText(w.stock, _bpsCache);
+      const bpsHtml = bpsText ? `<span class="wc-bps" title="분기/반기/사업보고서 기준">${bpsText}</span>` : '';
       return `<div class="wc-row" data-id="${w.id}" draggable="true">
         <div class="wc-main">
           <div class="wc-order-btns no-print">
@@ -5163,6 +5178,7 @@ function renderWatchlist() {
               ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
               ${_wcBadgeHtml(w.id,'stopPrice',   'wc-badge-red',  '손절',w.stopPrice,   w.price)}
               ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
+              ${bpsHtml}
             </div>
             <div class="wc-actions no-print" style="margin-left:auto">
               ${trendBadge}${trendDistBadge}${w2SigBadges}
@@ -5199,6 +5215,8 @@ function renderWatchlist() {
       return `${acctBadge}${metaParts ? `<span class="wc-tgt">${metaParts}</span>` : ''}${pctHtml}`;
     })() : '';
 
+    const nameTitle = _w2BpsText ? `${w.stock} · ${_w2BpsText}` : w.stock;
+
     return `<div class="wc-row" data-id="${w.id}" draggable="true">
       <div class="wc-main">
         <div class="wc-order-btns no-print">
@@ -5207,7 +5225,7 @@ function renderWatchlist() {
         </div>
         <span class="wc-dot wc-dot-${sig}" title="${{gray:'평상시',green:'매수신호',yellow:'주시구간',red:'손절근접'}[sig]}"></span>
         <div class="wc-info">
-          <span class="wc-name" title="${ea(w.stock)}">${eh(w.stock)}</span>
+          <span class="wc-name" title="${ea(nameTitle)}">${eh(w.stock)}</span>
           <span class="wc-tkr">${eh(dispTicker(w.ticker)||'—')}</span>
         </div>
         <div class="wc-price-row">
@@ -5540,6 +5558,15 @@ function _badgeInner(label, val, field, price) {
 
 function _wcBadgeHtml(id, field, cls, label, val, price) {
   return `<span class="wc-badge ${val ? cls : 'wc-badge-empty'}" data-field="${field}" onclick="startWatchBadgeEdit(event,${id},'${field}')" title="${label} 클릭하여 수정">${_badgeInner(label, val, field, price)}</span>`;
+}
+
+// BPS/PBR 텍스트 포맷 — 보유종목 인라인 표시와 관찰2 툴팁/상세패널이 공유하는 단일 포맷터.
+// 데이터는 /api/dart/bps → localStorage 'sm-bps-data'(fetchBpsData)에서 종목코드 기준으로 채워진다.
+function _bpsText(code, cache) {
+  const d = (cache || {})[code];
+  if (!d || !d.bps) return null;
+  const pbrText = d.pbr ? ` · PBR ${d.pbr.toFixed(2)}배` : '';
+  return `BPS ${fmt(Math.round(d.bps))}원${pbrText} (${d.period_label || '-'})`;
 }
 
 // ── 관찰2 전고점: 자동계산/수동입력 판별 + 표시 (요약 배지·상세패널 공용) ──
@@ -7496,6 +7523,15 @@ function fetchWatch2Signals() {
     .catch(() => {});
 }
 
+// 분기/반기/사업보고서 기준 BPS/PBR fetch → localStorage 'sm-bps-data' 갱신 (fetchWatch2Signals와 동일 패턴)
+function fetchBpsData() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  fetch(`${base}/api/dart/bps`, { headers:{'ngrok-skip-browser-warning':'1'} })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { if (d && Object.keys(d).length) { localStorage.setItem('sm-bps-data', JSON.stringify(d)); renderWatchlist(); } })
+    .catch(() => {});
+}
+
 // "오늘의 핵심관찰 TOP10" fetch → localStorage 'sm-watch2-top10' 갱신 (관찰2 전용, fetchWatch2Signals와 동일 패턴)
 function fetchWatch2Top10() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
@@ -7558,6 +7594,7 @@ function startRealtimeSSE() {
       registerWatchlistToSSE();
       fetchWatch2Signals();
       fetchWatch2Top10();
+      fetchBpsData();
       syncWatch2Meta();
     };
 
@@ -7839,6 +7876,7 @@ setTimeout(async () => {
     // watch2 신호 폴백 폴링: SSE push를 놓치거나 연결이 끊겨도 5분마다 최신 상태로 보정
     setInterval(fetchWatch2Signals, 5 * 60 * 1000);
     setInterval(fetchWatch2Top10, 5 * 60 * 1000);
+    setInterval(fetchBpsData, 5 * 60 * 1000);
   }
 }, 1000);
 
