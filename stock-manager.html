@@ -5076,16 +5076,28 @@ function renderWatchlist() {
       // 전고점(저항선) 배지: 자동/수동 여부에 따라 색상·굵기·아이콘·라벨로 구분 (_buildW2PeakBadge)
       w2PeakBadge = _buildW2PeakBadge(w, _w2ss);
 
-      // alertVolume 배지는 장중 실시간이 아니라 매일 08:50 배치가 "전일/그제" 완성봉을 비교한 스냅샷이라
-      // 문구와 툴팁으로 그 기준을 명시한다 (장중 실시간 급증과 헷갈리지 않도록).
+      // alertVolume 배지: 매일 08:50 배치의 "전일/그제" 스냅샷이 기본이지만, checkRealtimeVolume이
+      // 장중에 실시간 급증을 감지해 텔레그램을 보낼 때 volumeRatioLive 플래그와 함께 이 값을 즉시
+      // 덮어쓴다 — 그 상태를 "실시간"으로 별도 표시해 스냅샷과 헷갈리지 않게 한다.
+      // (volumeRatioLive는 다음날 08:50 배치가 latestWatch2Signals[code]를 통째로 새로 쓰면서
+      // 자동으로 사라지고 다시 스냅샷 표시로 돌아간다.)
+      const _isLiveVol = !!_w2ss.volumeRatioLive;
+      const _volLabel = _w2ss.volumeRatio
+        ? (_isLiveVol ? `⚡실시간(${_w2ss.volumeRatio.toFixed(1)}배)` : `📊전일 대비(${_w2ss.volumeRatio.toFixed(1)}배)`)
+        : '📊전일 대비';
+      const _volTitle = _isLiveVol
+        ? '당일 실시간 누적거래량 ÷ 전일 거래량 — 텔레그램 실시간 감지 시점 기준 (다음날 08:50 정규 배치 전까지 유지, 이후 전일 대비 스냅샷으로 교체됨)'
+        : '전일 거래량 ÷ 그제 거래량 — 매일 08:50 장 시작 전 기준 스냅샷 (장중 실시간 거래량과는 다름)';
+      const _volColor = _isLiveVol ? { bg:'rgba(240,136,62,.18)', fg:'var(--orange)', bd:'rgba(240,136,62,.4)' } : null;
+
       w2SigBadges = [
-        ['alertRsiOversold','📈RSI', null],
-        ['alertVolume',     _w2ss.volumeRatio ? `📊전일 대비(${_w2ss.volumeRatio.toFixed(1)}배)` : '📊전일 대비', '전일 거래량 ÷ 그제 거래량 — 매일 08:50 장 시작 전 기준 스냅샷 (장중 실시간 거래량과는 다름)'],
-        ['alertBullish',    '🕯양봉', null],
-        ['alertGoldenCross','🌟골든X', null],
-        ['alertMaAlignment','📐정배열', null],
+        ['alertRsiOversold','📈RSI', null, null],
+        ['alertVolume',     _volLabel, _volTitle, _volColor],
+        ['alertBullish',    '🕯양봉', null, null],
+        ['alertGoldenCross','🌟골든X', null, null],
+        ['alertMaAlignment','📐정배열', null, null],
       ].filter(([k]) => w[k] && _w2ss[k])
-       .map(([,l,t]) => `<span${t ? ` title="${escAttr(t)}"` : ''} style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">${l}</span>`)
+       .map(([,l,t,c]) => `<span${t ? ` title="${escAttr(t)}"` : ''} style="background:${c?c.bg:'rgba(188,140,255,.15)'};color:${c?c.fg:'var(--purple)'};border:1px solid ${c?c.bd:'rgba(188,140,255,.3)'};border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">${l}</span>`)
        .join('');
       // 추세선돌파: alertTrend 활성화 + 로컬 데이터로 직접 판단
       if (w.alertTrend) {
