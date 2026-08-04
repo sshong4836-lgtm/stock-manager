@@ -4859,7 +4859,8 @@ function renderWatchlist() {
       ? `자동: ${fmt(Math.round(_w2ss.resistancePrice))}` : '0';
 
     // 관찰2 상세패널 전용: BPS/PBR — 기본 화면(요약 배지)엔 안 보이고 ⚙ 상세보기에서만 노출
-    const _w2BpsText = wGrp === 'watch2' ? _bpsText(w.stock, _bpsCache) : null;
+    // w.stock은 표시용 종목명이라 DART 종목코드 기준인 _bpsCache 조회엔 못 쓴다 — w.ticker(코드)를 정규화해서 사용
+    const _w2BpsText = wGrp === 'watch2' ? _bpsText((w.ticker || '').replace(/\.(KS|KQ)$/i, ''), _bpsCache) : null;
 
     // 상세패널 각 필드
     const ea = escAttr, eh = escHtml;
@@ -5156,7 +5157,8 @@ function renderWatchlist() {
             return `<span style="color:${color};font-weight:700">${sign}${fmtF(pct,2)}%</span>`;
           })()
         : '';
-      const bpsText = _bpsText(w.stock, _bpsCache);
+      // w.stock은 표시용 종목명이라 DART 종목코드 기준인 _bpsCache 조회엔 못 쓴다 — w.ticker(코드)를 정규화해서 사용
+      const bpsText = _bpsText((w.ticker || '').replace(/\.(KS|KQ)$/i, ''), _bpsCache);
       const bpsHtml = bpsText ? `<span class="wc-bps" title="분기/반기/사업보고서 기준">${bpsText}</span>` : '';
       return `<div class="wc-row" data-id="${w.id}" draggable="true">
         <div class="wc-main">
