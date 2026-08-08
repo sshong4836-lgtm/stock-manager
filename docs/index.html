@@ -1724,6 +1724,7 @@ let portfolioAccountFilter = 'all'; // 포트폴리오 계좌 필터: 'all' | '�
 let _partialSellData = null;
 let _watchSearchPrice = 0;  // searchWatchTicker에서 조회한 현재가 임시 보관
 let watchlist       = JSON.parse(localStorage.getItem('sm-watchlist')    || '[]');
+let watch1QualityTags = {}; // { code: {sector, roe, per, pbr, addedAt, reason} } — 관찰1 자동추가 배지용, localStorage 미저장(항상 서버 조회)
 let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]');
 let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
 // 종목명 → Yahoo Finance 종목코드 매핑 (전 계좌 공유)
@@ -5233,6 +5234,7 @@ function renderWatchlist() {
     })() : '';
 
     const nameTitle = _w2BpsText ? `${w.stock} · ${_w2BpsText}` : w.stock;
+    const qTag = watch1QualityTags[w.ticker] || null; // 관찰1 품질필터 자동추가 배지(업종)
 
     return `<div class="wc-row" data-id="${w.id}" draggable="true">
       <div class="wc-main">
@@ -5244,6 +5246,7 @@ function renderWatchlist() {
         <div class="wc-info">
           <span class="wc-name" title="${ea(nameTitle)}">${eh(w.stock)}</span>
           <span class="wc-tkr">${eh(dispTicker(w.ticker)||'—')}</span>
+          ${qTag ? `<span style="background:rgba(121,192,255,.15);color:var(--blue);border:1px solid rgba(121,192,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap" title="품질필터 자동추가 · ROE ${qTag.roe.toFixed(1)}% · PER ${qTag.per.toFixed(1)} · PBR ${qTag.pbr.toFixed(2)}">${eh(qTag.sector||'업종?')}</span>` : ''}
         </div>
         <div class="wc-price-row">
           <div class="wc-price-cell">
@@ -7872,6 +7875,51 @@ async function restoreWatchlistFromServer() {
   }
 }
 
+// pipeline/watch1QualityScreen.js 같은 서버측 자동추가가 watch1에 새 종목코드를 넣어놔도
+// 브라우저의 sm-watchlist엔 로컬 편집 시에만 반영되므로, 페이지 로드 시 서버 watch1과 비교해
+// 로컬에 없는 코드만 추가한다(기존 항목은 건드리지 않음 — restoreWatchlistFromServer와 달리
+// 로컬 상태가 비어있지 않아도 항상 실행). 반드시 다음 syncWatchlistGroupsToServer 전에
+// 끝나야 서버가 추가해둔 종목이 브라우저의 구버전 스냅샷으로 되돌려지지 않는다.
+async function mergeNewWatch1FromServer() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  try {
+    const res = await fetch(`${proxyUrl}/watchlist`, { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const serverWatch1 = data.groups?.watch1 || [];
+    const names = data.names || {};
+    const localTickers = new Set(watchlist.map(w => w.ticker));
+    const newCodes = serverWatch1.filter(code => !localTickers.has(code));
+    if (!newCodes.length) return;
+
+    newCodes.forEach(code => {
+      watchlist.push({ id: Date.now() + Math.floor(Math.random() * 100000), stock: names[code] || code, ticker: code, group: 'watch1', stopPrice: 0, target: 0, memo: '' });
+    });
+    localStorage.setItem('sm-watchlist', JSON.stringify(watchlist));
+    renderWatchlist();
+    toast(`🔵 관찰1에 자동추가된 종목 ${newCodes.length}개를 반영했습니다.`);
+    console.log(`🔵 서버 자동추가 관찰1 병합: ${newCodes.join(', ')}`);
+  } catch (e) {
+    console.log('관찰1 자동추가 병합 실패:', e.message);
+  }
+}
+
+// 관찰1 자동추가 품질 필터의 배지용 메타(업종/ROE/PER/PBR) — watchlist.json details와 분리된
+// 별도 파일에서 내려주는 읽기 전용 데이터라 로컬에 저장하지 않고 매번 새로 가져온다.
+async function loadWatch1QualityTags() {
+  const proxyUrl = kiwoomSettings.proxyUrl;
+  if (!proxyUrl) return;
+  try {
+    const res = await fetch(`${proxyUrl}/api/watch1/quality-tags`, { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    watch1QualityTags = await res.json();
+    renderWatchlist();
+  } catch (e) {
+    console.log('관찰1 품질배지 조회 실패:', e.message);
+  }
+}
+
 // SSE 연결 상태 표시
 function updateSSEStatus(connected) {
   const btn = document.getElementById('sse-status-btn');
@@ -7886,6 +7934,8 @@ function updateSSEStatus(connected) {
 setTimeout(async () => {
   if (kiwoomSettings.proxyUrl) {
     if (!watchlist.length) await restoreWatchlistFromServer();
+    await mergeNewWatch1FromServer();
+    loadWatch1QualityTags();
     await restoreEtfDataFromServer();
     scheduleEtfServerBackup(); // 매 세션 시작 시 한 번은 서버에 현재 상태를 반영해둔다
     startRealtimeSSE();
