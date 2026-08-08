@@ -4846,6 +4846,9 @@ function renderWatchlist() {
   let _watch2SigsCache = {};
   try { _watch2SigsCache = JSON.parse(localStorage.getItem('sm-watch2-signals') || '{}'); } catch (e) { _watch2SigsCache = {}; }
 
+  let _watch1SigsCache = {};
+  try { _watch1SigsCache = JSON.parse(localStorage.getItem('sm-watch1-signals') || '{}'); } catch (e) { _watch1SigsCache = {}; }
+
   // sm-bps-data: 분기/반기/사업보고서 공시 기준 BPS/PBR (보유종목 인라인 표시 + 관찰2 툴팁/상세패널 공용)
   let _bpsCache = {};
   try { _bpsCache = JSON.parse(localStorage.getItem('sm-bps-data') || '{}'); } catch (e) { _bpsCache = {}; }
@@ -4857,8 +4860,11 @@ function renderWatchlist() {
     // 관찰2 전고점: 자동계산/수동입력 여부 — 상세패널 입력란과 요약 배지가 공유
     const _w2ss = wGrp === 'watch2' ? (_watch2SigsCache[(w.ticker || '').replace(/\.(KS|KQ)$/i, '')] || {}) : {};
     const _w2HasManualPeak = parseFloat(w.trendH1Price || 0) > 0;
-    const _w2PeakPlaceholder = (wGrp === 'watch2' && !_w2HasManualPeak && _w2ss.resistancePrice)
-      ? `자동: ${fmt(Math.round(_w2ss.resistancePrice))}` : '0';
+    // 관찰1 전고점(저항선) 자동계산 — 관찰2와 동일한 서버 계산치를 별도 채널(_watch1SigsCache)로 받는다
+    const _w1ss = wGrp === 'watch1' ? (_watch1SigsCache[(w.ticker || '').replace(/\.(KS|KQ)$/i, '')] || {}) : {};
+    const _wAutoSs = wGrp === 'watch2' ? _w2ss : (wGrp === 'watch1' ? _w1ss : {});
+    const _w2PeakPlaceholder = ((wGrp === 'watch2' || wGrp === 'watch1') && !_w2HasManualPeak && _wAutoSs.resistancePrice)
+      ? `자동: ${fmt(Math.round(_wAutoSs.resistancePrice))}` : '0';
 
     // 관찰2 상세패널 전용: BPS/PBR — 기본 화면(요약 배지)엔 안 보이고 ⚙ 상세보기에서만 노출
     // w.stock은 표시용 종목명이라 DART 종목코드 기준인 _bpsCache 조회엔 못 쓴다 — w.ticker(코드)를 정규화해서 사용
@@ -5055,7 +5061,7 @@ function renderWatchlist() {
                 ].map(([key, label]) => `
                   <label class="alert-check-item">
                     <input type="checkbox" ${w[key] ? 'checked' : ''}
-                      onchange="saveWatchField(${w.id},'${key}',this.checked)">
+                      onchange="saveWatchField(${w.id},'${key}',this.checked)${key === 'alertTrend' ? ';syncWatch1Meta()' : ''}">
                     <label>${label}</label>
                   </label>`).join('')}
               </div>
@@ -5150,6 +5156,17 @@ function renderWatchlist() {
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 돌파 중">🚀 저항선 돌파</span>`;
       else if (Math.abs(resPct) <= 3)
         trendBadge = `<span class="badge trendline-badge" style="background:rgba(240,136,62,.2);color:var(--orange);font-size:10px;padding:2px 6px;flex-shrink:0" title="저항선 근접">⚠️ 저항선 근접</span>`;
+      trendDistBadge = _trendDistSpan(resPct);
+    } else if (wGrp === 'watch1' && _p1 <= 0 && _w1ss.resistancePrice && w.price) {
+      // 케이스 D: 관찰1, 수동 입력 없음 → 서버가 계산한 최근 20일 최고가(자동 저항선)
+      const autoRes = _w1ss.resistancePrice;
+      const resPct = (w.price - autoRes) / autoRes * 100;
+      if (w.price > autoRes)
+        trendBadge = `<span class="badge trendline-badge" style="background:rgba(63,185,80,.2);color:var(--green);font-size:10px;padding:2px 6px;flex-shrink:0" title="자동 저항선(최근 20일 최고가) 돌파 중">🚀 저항선 돌파 <span style="opacity:.7">(🔄자동)</span></span>`;
+      else if (Math.abs(resPct) <= 3)
+        trendBadge = `<span class="badge trendline-badge" style="background:rgba(240,136,62,.2);color:var(--orange);font-size:10px;padding:2px 6px;flex-shrink:0" title="자동 저항선(최근 20일 최고가) 근접">⚠️ 저항선 근접 <span style="opacity:.7">(🔄자동)</span></span>`;
+      else
+        trendBadge = `<span class="badge trendline-badge" style="background:rgba(255,255,255,.06);color:var(--muted);font-size:10px;padding:2px 6px;flex-shrink:0" title="자동 저항선(최근 20일 최고가)">🔄 자동 ${fmt(Math.round(autoRes))}</span>`;
       trendDistBadge = _trendDistSpan(resPct);
     }
 
@@ -5531,6 +5548,7 @@ function saveWatchField(id, field, value) {
   if (['trendH1Date','trendH1Price','trendH2Date','trendH2Price'].includes(field)) {
     updateTrendlineDisplay(id);
     if (w.group === 'watch2') syncWatch2Meta();
+    else if (w.group === 'watch1') syncWatch1Meta();
   }
   if (['target','supportPrice','stopPrice'].includes(field)) {
     updateWatchBadgesInPlace(id);
@@ -7543,6 +7561,15 @@ function fetchWatch2Signals() {
     .catch(() => {});
 }
 
+// 관찰1 저항선(전고점) 자동계산 신호 fetch — fetchWatch2Signals와 동일 패턴
+function fetchWatch1Signals() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  fetch(`${base}/api/watch1/signals`, { headers:{'ngrok-skip-browser-warning':'1'} })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { if (d && Object.keys(d).length) { localStorage.setItem('sm-watch1-signals', JSON.stringify(d)); renderWatchlist(); } })
+    .catch(() => {});
+}
+
 // 분기/반기/사업보고서 기준 BPS/PBR fetch → localStorage 'sm-bps-data' 갱신 (fetchWatch2Signals와 동일 패턴)
 function fetchBpsData() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
@@ -7590,6 +7617,28 @@ function syncWatch2Meta() {
   }).catch(() => {});
 }
 
+// 관찰1 추세선/저항선 메타 서버 동기화 — syncWatch2Meta와 완전히 동일한 패턴, group만 watch1.
+// 지금까지 이 함수가 없어서 관찰1의 trendH1/H2 입력값이 브라우저에만 남고 서버로 안 갔었다.
+function syncWatch1Meta() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  const meta = {};
+  watchlist.filter(w => w.group === 'watch1' && w.ticker).forEach(w => {
+    const code = w.ticker.replace(/\.(KS|KQ)$/i, '');
+    meta[code] = {
+      alertTrend:   !!w.alertTrend,
+      trendH1Date:  w.trendH1Date  || '',
+      trendH1Price: w.trendH1Price || 0,
+      trendH2Date:  w.trendH2Date  || '',
+      trendH2Price: w.trendH2Price || 0,
+    };
+  });
+  fetch(`${base}/api/watch1/meta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+    body: JSON.stringify(meta),
+  }).catch(() => {});
+}
+
 // ★ 실시간 SSE 연동 (맥미니 proxy → 웹앱 자동 업데이트)
 // ══════════════════════════════════════════════════════
 let _sseSource = null;
@@ -7616,6 +7665,8 @@ function startRealtimeSSE() {
       fetchWatch2Top10();
       fetchBpsData();
       syncWatch2Meta();
+      fetchWatch1Signals();
+      syncWatch1Meta();
     };
 
     _sseSource.onmessage = (e) => {
@@ -7649,6 +7700,26 @@ function startRealtimeSSE() {
           localStorage.setItem('sm-watch2-signals', JSON.stringify(data.signals));
           if (Array.isArray(data.top10)) localStorage.setItem('sm-watch2-top10', JSON.stringify(data.top10));
           renderWatchlist();
+        }
+
+        // watch1 배치(08:50/17:50) 완료 직후 서버가 능동 push → 저항선/거래량 배지 즉시 갱신
+        if (data.type === 'watch1signals' && data.signals) {
+          localStorage.setItem('sm-watch1-signals', JSON.stringify(data.signals));
+          renderWatchlist();
+        }
+
+        // 관찰1 자동승격 — 서버가 이미 watch1→ready로 옮겨놨으므로, 열려있는 브라우저의 로컬
+        // 상태도 같은 방향으로 맞춰준다(안 그러면 다음 편집 시 옛 상태가 서버로 되돌아갈 수 있음).
+        if (data.type === 'watch1Promoted' && Array.isArray(data.codes)) {
+          let moved = 0;
+          data.codes.forEach(code => {
+            watchlist.filter(w => (w.ticker || '').replace(/\.(KS|KQ)$/i, '') === code && w.group === 'watch1').forEach(w => {
+              w.group = 'ready';
+              moved++;
+              toast(`🚀 ${w.stock} 추세선 돌파 + 거래량 급증 → 매수대기로 자동승격됐습니다.`, 'green');
+            });
+          });
+          if (moved) { save('watchlist', watchlist); renderWatchlist(); }
         }
 
         // 리스크 TOP10 분석(수동 실행/08:50 배치/승인) 완료 직후 서버가 능동 push → 새로고침 없이 즉시 갱신
@@ -7944,6 +8015,7 @@ setTimeout(async () => {
     setInterval(fetchWatch2Signals, 5 * 60 * 1000);
     setInterval(fetchWatch2Top10, 5 * 60 * 1000);
     setInterval(fetchBpsData, 5 * 60 * 1000);
+    setInterval(fetchWatch1Signals, 5 * 60 * 1000);
   }
 }, 1000);
 
