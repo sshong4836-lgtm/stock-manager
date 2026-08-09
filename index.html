@@ -5077,6 +5077,9 @@ function renderWatchlist() {
         <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})">✕ 닫기</button>
       </div>`;
 
+    // 관찰1 전고점(저항선) 배지: watch2와 동일한 렌더러(_buildW2PeakBadge) 재사용, 캐시만 watch1용(_w1ss)
+    const peakBadge = wGrp === 'watch1' ? _buildW2PeakBadge(w, _w1ss) : '';
+
     // watch2 조건 충족 배지 계산
     let w2SigBadges = '';
     let w2PeakBadge = '';
@@ -5272,7 +5275,7 @@ function renderWatchlist() {
           </div>
           <div class="wc-price-badges">
             ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
-            ${wGrp === 'watch2' ? w2PeakBadge : _wcBadgeHtml(w.id,'stopPrice','wc-badge-red','손절',w.stopPrice,w.price)}
+            ${wGrp === 'watch2' ? w2PeakBadge : (wGrp === 'watch1' ? peakBadge : _wcBadgeHtml(w.id,'stopPrice','wc-badge-red','손절',w.stopPrice,w.price))}
             ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
           </div>
           <div class="wc-actions no-print" style="margin-left:auto">
