@@ -5550,7 +5550,7 @@ function saveWatchField(id, field, value) {
     if (w.group === 'watch2') syncWatch2Meta();
     else if (w.group === 'watch1') syncWatch1Meta();
   }
-  if (['target','supportPrice','stopPrice'].includes(field)) {
+  if (['target','supportPrice','stopPrice','horizPrice'].includes(field)) {
     updateWatchBadgesInPlace(id);
     _syncAlertsToServer(w);
   }
@@ -5569,6 +5569,7 @@ function _syncAlertsToServer(w) {
       stopLoss:     w.stopPrice     || 0,
       target:       w.target        || 0,
       supportPrice: w.supportPrice  || 0,
+      horizPrice:   w.horizPrice    || 0,
     })
   }).catch(e => console.warn('alerts 동기화 실패:', e.message));
 }
