@@ -1144,6 +1144,7 @@
     <button class="btn btn-sm w-racct-btn"        data-acct="NH"    onclick="setWatchReadyAccountFilter('NH')">🟢 NH</button>
   </div>
   <div id="w2-top10-section" style="display:none;margin-bottom:14px"></div>
+  <div id="w2-tracker-section" style="display:none;margin-bottom:14px"></div>
   <div class="wc-list" id="w-grid"></div>
 </div>
 
@@ -4762,6 +4763,104 @@ function renderWatch2Top10() {
     </div>`;
 }
 
+// 관찰2 정식 신호 정렬 우선순위 — 정배열/저항선돌파처럼 상태지속형 신호를 앞쪽에 노출 (server.js WATCH2_SIGNAL_SORT_ORDER와 동일)
+const W2_TRACKER_SIGNAL_ORDER = ['정배열', '저항선돌파', '골든크로스', 'RSI과매도탈출', '양봉전환', '거래량급증'];
+let _watch2TrackerShowAll = false; // "지난 이력 보기" 토글 상태
+
+function toggleWatch2TrackerShowAll() {
+  _watch2TrackerShowAll = !_watch2TrackerShowAll;
+  renderWatch2TrackerHistory();
+}
+
+// "최근 2주 핵심관찰 이력" 섹션 — TOP10 진입 종목의 진입가/신호를 14일간 추적 (관찰2 전용)
+function renderWatch2TrackerHistory() {
+  const section = document.getElementById('w2-tracker-section');
+  if (!section) return;
+  if (_watchGroup !== 'watch2') { section.style.display = 'none'; return; }
+
+  let data = { records: [], fileSizeKB: 0, count: 0 };
+  try { data = JSON.parse(localStorage.getItem('sm-watch2-tracker') || 'null') || data; } catch (e) {}
+  const records = Array.isArray(data.records) ? data.records : [];
+  if (!records.length) { section.style.display = 'none'; return; }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const visible = records.filter(r =>
+    _watch2TrackerShowAll ||
+    r.status === '진행중' ||
+    (r.status === '승격' && r.statusChangedAt === todayStr)
+  ).sort((a, b) => b.entryDate.localeCompare(a.entryDate));
+  const hiddenCount = records.length - visible.length;
+
+  const sizeKB = data.fileSizeKB || 0;
+  const badgeColor = sizeKB > 1024 ? 'var(--red)' : sizeKB > 500 ? 'var(--yellow)' : 'var(--muted)';
+
+  section.style.display = '';
+  section.innerHTML = `
+    <div class="card" style="margin-bottom:0">
+      <div class="card-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span>📊 최근 2주 핵심관찰 이력</span>
+        <span style="font-size:11px;font-weight:600;color:${badgeColor}">📁 ${sizeKB}KB · ${data.count||records.length}건</span>
+      </div>
+      <div style="overflow-x:auto;margin-top:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);color:var(--muted);text-align:left">
+              <th style="padding:4px 8px">종목명</th>
+              <th style="padding:4px 8px">진입일(경과)</th>
+              <th style="padding:4px 8px">진입가</th>
+              <th style="padding:4px 8px">현재가</th>
+              <th style="padding:4px 8px">수익률</th>
+              <th style="padding:4px 8px;white-space:normal">현재 신호</th>
+              <th style="padding:4px 8px">상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visible.map(r => renderWatch2TrackerRow(r, todayStr)).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${hiddenCount > 0 || _watch2TrackerShowAll ? `
+        <div style="margin-top:8px">
+          <button class="btn btn-sm" onclick="toggleWatch2TrackerShowAll()">
+            ${_watch2TrackerShowAll ? '지난 이력 접기' : `지난 이력 보기 (${hiddenCount}건 숨김)`}
+          </button>
+        </div>` : ''}
+    </div>`;
+}
+
+function renderWatch2TrackerRow(r, todayStr) {
+  const elapsedDays = Math.max(0, Math.round((new Date(todayStr) - new Date(r.entryDate)) / 86400000));
+  const signals = [...(r.currentSignals||[])].sort((a, b) => W2_TRACKER_SIGNAL_ORDER.indexOf(a) - W2_TRACKER_SIGNAL_ORDER.indexOf(b));
+  const newSet = new Set(r.newSignalsSinceEntry||[]);
+  const signalsHtml = signals.length
+    ? signals.map(s => `<span style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:10px;font-weight:700;padding:1px 5px;margin-right:3px;display:inline-block">${newSet.has(s) ? '🆕 ' : ''}${escHtml(s)}</span>`).join('')
+    : `<span style="font-size:11px;color:var(--muted)">(없음)</span>`;
+
+  let statusHtml;
+  if (r.status === '진행중') {
+    statusHtml = (r.currentSignals||[]).length
+      ? `<span style="color:var(--green)">🟢 진행중</span>`
+      : `<span style="color:var(--muted)">⚪ 신호꺼짐</span>`;
+  } else if (r.status === '만료') {
+    statusHtml = `<span style="color:var(--muted)">⚫ 만료</span>`;
+  } else {
+    const to = r.promotedTo === 'holding' ? '보유종목' : '매수대기';
+    statusHtml = `<span style="color:var(--yellow)">🎉 ${to} 승격</span>`;
+  }
+
+  const returnColor = r.returnPct > 0 ? 'var(--green)' : r.returnPct < 0 ? 'var(--red)' : 'var(--muted)';
+  return `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:5px 8px;font-weight:700">${escHtml(r.stockName)}</td>
+      <td style="padding:5px 8px;color:var(--muted)">${escHtml(r.entryDate)} (${elapsedDays}일째)</td>
+      <td style="padding:5px 8px">${(r.entryPrice||0).toLocaleString()}</td>
+      <td style="padding:5px 8px">${(r.currentPrice||0).toLocaleString()}</td>
+      <td style="padding:5px 8px;font-weight:700;color:${returnColor}">${r.returnPct > 0 ? '+' : ''}${(r.returnPct||0).toFixed(1)}%</td>
+      <td style="padding:5px 8px;white-space:normal">${signalsHtml}</td>
+      <td style="padding:5px 8px">${statusHtml}</td>
+    </tr>`;
+}
+
 function renderWatchlist() {
   const q = document.getElementById('w-search').value.toLowerCase();
 
@@ -4791,6 +4890,7 @@ function renderWatchlist() {
   });
 
   renderWatch2Top10();
+  renderWatch2TrackerHistory();
 
   // 매수대기 계좌 필터 바 표시/숨김 및 active 버튼 갱신
   const racctBar = document.getElementById('w-ready-acct-filter');
@@ -7601,6 +7701,21 @@ function fetchWatch2Top10() {
     .catch(err => console.log('[watch2Top10] 폴링 실패:', err.message));
 }
 
+// "최근 2주 핵심관찰 이력" fetch → localStorage 'sm-watch2-tracker' 갱신 (fetchWatch2Top10과 동일 패턴)
+function fetchWatch2TrackerHistory() {
+  const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
+  fetch(`${base}/api/watch2/tracker-history`, { headers:{'ngrok-skip-browser-warning':'1'} })
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (d && Array.isArray(d.records)) {
+        localStorage.setItem('sm-watch2-tracker', JSON.stringify(d));
+        renderWatchlist();
+        console.log(`[watch2Tracker] 갱신 완료 — ${d.count}건, ${d.fileSizeKB}KB`);
+      }
+    })
+    .catch(err => console.log('[watch2Tracker] 폴링 실패:', err.message));
+}
+
 function syncWatch2Meta() {
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
   const meta = {};
@@ -7667,6 +7782,7 @@ function startRealtimeSSE() {
       registerWatchlistToSSE();
       fetchWatch2Signals();
       fetchWatch2Top10();
+      fetchWatch2TrackerHistory();
       fetchBpsData();
       syncWatch2Meta();
       fetchWatch1Signals();
@@ -7703,6 +7819,13 @@ function startRealtimeSSE() {
         if (data.type === 'watch2signals' && data.signals) {
           localStorage.setItem('sm-watch2-signals', JSON.stringify(data.signals));
           if (Array.isArray(data.top10)) localStorage.setItem('sm-watch2-top10', JSON.stringify(data.top10));
+          if (Array.isArray(data.trackerHistory)) {
+            localStorage.setItem('sm-watch2-tracker', JSON.stringify({
+              records: data.trackerHistory,
+              fileSizeKB: data.trackerFileInfo?.fileSizeKB || 0,
+              count: data.trackerFileInfo?.count ?? data.trackerHistory.length
+            }));
+          }
           renderWatchlist();
         }
 
@@ -8018,6 +8141,7 @@ setTimeout(async () => {
     // watch2 신호 폴백 폴링: SSE push를 놓치거나 연결이 끊겨도 5분마다 최신 상태로 보정
     setInterval(fetchWatch2Signals, 5 * 60 * 1000);
     setInterval(fetchWatch2Top10, 5 * 60 * 1000);
+    setInterval(fetchWatch2TrackerHistory, 5 * 60 * 1000);
     setInterval(fetchBpsData, 5 * 60 * 1000);
     setInterval(fetchWatch1Signals, 5 * 60 * 1000);
   }
