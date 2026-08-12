@@ -4494,7 +4494,11 @@ function _buildW2ComboBadges(ss) {
     const col = c.isBuy
       ? { bg:'rgba(63,185,80,.22)', fg:'var(--green)',  bd:'rgba(63,185,80,.55)' }
       : { bg:'rgba(240,136,62,.22)', fg:'var(--orange)', bd:'rgba(240,136,62,.55)' };
-    const tip = `${c.desc} → ${c.label}` + (c.isBuy ? ` (TOP10 점수 +${c.bonus})` : ' — 매수신호 아님, 변동성 확대 주의');
+    // evidence(서버가 계산한 수치 근거)가 있으면 함께 보여준다 — 💪는 완화 조건(1.5배·전일 망치형)으로
+    // 발동할 수 있어 개별 배지만 봐서는 왜 켜졌는지 알 수 없기 때문.
+    const tip = `${c.desc} → ${c.label}`
+      + (c.evidence ? `\n근거: ${c.evidence}` : '')
+      + (c.isBuy ? `\n(TOP10 점수 +${c.bonus})` : '\n— 매수신호 아님, 변동성 확대 주의');
     return `<span title="${escAttr(tip)}" style="background:${col.bg};color:${col.fg};border:1px solid ${col.bd};border-radius:4px;font-size:10px;font-weight:800;padding:1px 6px;white-space:nowrap;flex-shrink:0">${c.icon}${escHtml(c.label)}</span>`;
   }).join('');
 }
@@ -5167,16 +5171,19 @@ function renderWatchlist() {
                   &nbsp;· 거래량급증 + 골든크로스 동시 충족<br>
                   &nbsp;· 거래량급증 + 양봉전환 동시 충족<br>
                   &nbsp;· 거래량급증 + RSI과매도탈출 동시 충족<br>
-                  &nbsp;· 거래량급증 + 장대양봉 / 망치형 동시 충족<br>
+                  &nbsp;· 매수 조합신호(🔥강한매수 / 💪반전신호) 발생<br>
                   &nbsp;· 추세선돌파 (단독 긴급알림)<br>
                   📊 <b>일반알림 조건</b>:<br>
                   &nbsp;· 정배열 단독 진입<br>
                   &nbsp;· 위 조건 중 2개 이상 동시 충족<br>
                   ⭐ <b>조합신호</b> (개별 배지 앞에 강조 표시 + 전용 텔레그램):<br>
-                  &nbsp;· 🔥 <b>강한매수</b> = 거래량급증 + 장대양봉 <span style="color:var(--green)">(TOP10 +15점)</span><br>
-                  &nbsp;· 💪 <b>반전신호</b> = 거래량급증 + 망치형(하락중) <span style="color:var(--green)">(TOP10 +15점)</span><br>
-                  &nbsp;· ⚠️ <b>변동성경계</b> = 거래량급증 + 도지캔들 <span style="color:var(--orange)">(매수신호 아님 · 보너스 없음)</span><br>
-                  💡 양봉전환·도지캔들은 <b>단독</b>으로 발생하면 노이즈가 많아 텔레그램을 보내지 않고 화면에만 표시합니다.
+                  &nbsp;· 🔥 <b>강한매수</b> = 거래량 2배↑ + 장대양봉 <span style="color:var(--green)">(TOP10 +15점)</span><br>
+                  &nbsp;· 💪 <b>반전신호</b> = 거래량 <b>1.5배↑</b> + 망치형(<b>당일 또는 전일</b>, 하락중) <span style="color:var(--green)">(TOP10 +15점)</span><br>
+                  &nbsp;· ⚠️ <b>변동성경계</b> = 거래량 2배↑ + 도지캔들 <span style="color:var(--orange)">(매수신호 아님 · 보너스 없음)</span><br>
+                  💡 양봉전환·도지캔들은 <b>단독</b>으로 발생하면 노이즈가 많아 텔레그램을 보내지 않고 화면에만 표시합니다.<br>
+                  💡 💪반전신호만 거래량 기준이 1.5배이고 전일 망치형도 인정합니다 — 2배·당일로만 보면 실측 발생률이
+                  0.11%(64종목 하루 0.07건)로 사실상 발동하지 않아 완화했습니다. 개별 <b>거래량급증</b> 신호와
+                  🔥·⚠️는 기존 2배 기준 그대로입니다.
                 </div>
               </div>`;
             } else {
