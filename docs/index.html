@@ -4479,10 +4479,30 @@ function moveWatchBackTo(id, group) {
   toast(`${w.stock}을(를) ${group === 'watch1' ? '관찰1' : '관찰2'}로 이동했습니다.`);
 }
 
+// 관찰2 개별 알림 조건 키 — "N/9 조건 충족" 배지와 상세 체크박스가 같은 목록을 쓰도록 한 곳에서만 정의
+// (server.js WATCH2_SIGNAL_LABELS의 9개 키와 일치해야 함). 조합신호(🔥/💪/⚠️)는 개별 조건이 아니라
+// 서버가 그 위에서 계산하는 별도 레이어라 여기 포함되지 않는다.
+const W2_ALERT_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend','alertLongBull','alertHammer','alertDoji'];
+
+// 조합신호 강조 배지 — 서버가 내려준 comboSignals(icon/label/isBuy)를 개별 배지 앞에 크게 표시.
+// 개별 조건 체크박스와 무관하게 항상 표시한다(조합 판정은 서버 전담이고, 놓치면 안 되는 신호라서).
+function _buildW2ComboBadges(ss) {
+  const combos = (ss && ss.comboSignals) || [];
+  if (!combos.length) return '';
+  return combos.map(c => {
+    // 매수 조합(🔥/💪)은 초록, 매수신호가 아닌 ⚠️변동성경계는 주황으로 구분
+    const col = c.isBuy
+      ? { bg:'rgba(63,185,80,.22)', fg:'var(--green)',  bd:'rgba(63,185,80,.55)' }
+      : { bg:'rgba(240,136,62,.22)', fg:'var(--orange)', bd:'rgba(240,136,62,.55)' };
+    const tip = `${c.desc} → ${c.label}` + (c.isBuy ? ` (TOP10 점수 +${c.bonus})` : ' — 매수신호 아님, 변동성 확대 주의');
+    return `<span title="${escAttr(tip)}" style="background:${col.bg};color:${col.fg};border:1px solid ${col.bd};border-radius:4px;font-size:10px;font-weight:800;padding:1px 6px;white-space:nowrap;flex-shrink:0">${c.icon}${escHtml(c.label)}</span>`;
+  }).join('');
+}
+
 function updateW2AlertBadge(watchId) {
   const w = watchlist.find(x => x.id === watchId);
   if (!w) return;
-  const W2_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend'];
+  const W2_KEYS = W2_ALERT_KEYS;
   // 체크박스 실제 상태를 DOM에서 읽음
   const cbs = document.querySelectorAll(`[data-w2id="${watchId}"]`);
   let selCount = 0;
@@ -4749,6 +4769,7 @@ function renderWatch2Top10() {
               <span style="font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.name)}</span>
               <span style="font-size:11px;color:var(--muted);font-family:monospace;flex-shrink:0">${escHtml(r.code)}</span>
             </div>
+            ${(r.comboSignals||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">${_buildW2ComboBadges(r)}</div>` : ''}
             <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px">
               ${(r.triggered||[]).length
                 ? r.triggered.map(t => `<span style="background:rgba(188,140,255,.15);color:var(--purple);border:1px solid rgba(188,140,255,.3);border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px">${escHtml(t)}</span>`).join('')
@@ -4756,7 +4777,7 @@ function renderWatch2Top10() {
             </div>
             <div style="font-size:11px;color:var(--muted)">
               최근7일 avgα: <b style="color:${r.avgAlpha > 0 ? 'var(--green)' : r.avgAlpha < 0 ? 'var(--red)' : 'var(--muted)'}">${(r.avgAlpha||0).toFixed(2)}</b>
-              · score ${(r.score||0).toFixed(1)}
+              · score ${(r.score||0).toFixed(1)}${r.comboBonus ? ` <b style="color:var(--green)">(조합 +${r.comboBonus})</b>` : ''}
             </div>
           </div>`).join('')}
       </div>
@@ -4764,7 +4785,7 @@ function renderWatch2Top10() {
 }
 
 // 관찰2 정식 신호 정렬 우선순위 — 정배열/저항선돌파처럼 상태지속형 신호를 앞쪽에 노출 (server.js WATCH2_SIGNAL_SORT_ORDER와 동일)
-const W2_TRACKER_SIGNAL_ORDER = ['정배열', '저항선돌파', '골든크로스', 'RSI과매도탈출', '양봉전환', '거래량급증'];
+const W2_TRACKER_SIGNAL_ORDER = ['정배열', '저항선돌파', '골든크로스', 'RSI과매도탈출', '장대양봉', '망치형', '양봉전환', '도지캔들', '거래량급증'];
 let _watch2TrackerShowAll = false; // "지난 이력 보기" 토글 상태
 
 function toggleWatch2TrackerShowAll() {
@@ -5097,7 +5118,7 @@ function renderWatchlist() {
         <div class="alert-checks-section">
           ${(() => {
             if (wGrp === 'watch2') {
-              const W2_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend'];
+              const W2_KEYS = W2_ALERT_KEYS;
               const selCount  = W2_KEYS.filter(k => w[k]).length;
               const minCount  = w.minAlertCount || 2;
               const metColor  = selCount >= minCount && selCount > 0 ? 'var(--green)' : 'var(--muted)';
@@ -5120,6 +5141,9 @@ function renderWatchlist() {
                     ['alertGoldenCross', '🌟 골든크로스 시 알림'],
                     ['alertMaAlignment', '📐 이동평균선 정배열 진입 시 알림 (5일>20일>60일>120일)'],
                     ['alertTrend',       '📉 추세선/저항선 돌파 시 알림 (고점1·2 설정 필요)'],
+                    ['alertLongBull',    '🟥 장대양봉 시 알림 (몸통이 20일 평균 몸통의 1.5배 이상)'],
+                    ['alertHammer',      '🔨 망치형 시 알림 (아래꼬리≥몸통2배 · 위꼬리≤40% · 5일 하락중)'],
+                    ['alertDoji',        '⚪ 도지캔들 시 알림 (몸통이 당일 고저 범위의 5% 이내 · 단독 발송 안 함)'],
                   ].map(([key, label]) => `
                     <label class="alert-check-item">
                       <input type="checkbox" ${w[key] ? 'checked' : ''} data-w2id="${w.id}"
@@ -5143,10 +5167,16 @@ function renderWatchlist() {
                   &nbsp;· 거래량급증 + 골든크로스 동시 충족<br>
                   &nbsp;· 거래량급증 + 양봉전환 동시 충족<br>
                   &nbsp;· 거래량급증 + RSI과매도탈출 동시 충족<br>
+                  &nbsp;· 거래량급증 + 장대양봉 / 망치형 동시 충족<br>
                   &nbsp;· 추세선돌파 (단독 긴급알림)<br>
                   📊 <b>일반알림 조건</b>:<br>
                   &nbsp;· 정배열 단독 진입<br>
-                  &nbsp;· 위 조건 중 2개 이상 동시 충족
+                  &nbsp;· 위 조건 중 2개 이상 동시 충족<br>
+                  ⭐ <b>조합신호</b> (개별 배지 앞에 강조 표시 + 전용 텔레그램):<br>
+                  &nbsp;· 🔥 <b>강한매수</b> = 거래량급증 + 장대양봉 <span style="color:var(--green)">(TOP10 +15점)</span><br>
+                  &nbsp;· 💪 <b>반전신호</b> = 거래량급증 + 망치형(하락중) <span style="color:var(--green)">(TOP10 +15점)</span><br>
+                  &nbsp;· ⚠️ <b>변동성경계</b> = 거래량급증 + 도지캔들 <span style="color:var(--orange)">(매수신호 아님 · 보너스 없음)</span><br>
+                  💡 양봉전환·도지캔들은 <b>단독</b>으로 발생하면 노이즈가 많아 텔레그램을 보내지 않고 화면에만 표시합니다.
                 </div>
               </div>`;
             } else {
@@ -5183,7 +5213,9 @@ function renderWatchlist() {
     // watch2 조건 충족 배지 계산
     let w2SigBadges = '';
     let w2PeakBadge = '';
+    let w2ComboBadges = '';   // 조합신호(🔥/💪/⚠️) 강조 배지 — 개별 배지 앞에 붙는다
     if (wGrp === 'watch2') {
+      w2ComboBadges = _buildW2ComboBadges(_w2ss);
       // 전고점(저항선) 배지: 자동/수동 여부에 따라 색상·굵기·아이콘·라벨로 구분 (_buildW2PeakBadge)
       w2PeakBadge = _buildW2PeakBadge(w, _w2ss);
 
@@ -5207,6 +5239,9 @@ function renderWatchlist() {
         ['alertBullish',    '🕯양봉', null, null],
         ['alertGoldenCross','🌟골든X', null, null],
         ['alertMaAlignment','📐정배열', null, null],
+        ['alertLongBull',   '🟥장대양봉', '양봉 + 몸통이 직전 20일 평균 몸통의 1.5배 이상', null],
+        ['alertHammer',     '🔨망치', '아래꼬리 ≥ 몸통×2, 위꼬리 ≤ 몸통×40%, 최근 5일 종가 하락 중일 때만 유효', null],
+        ['alertDoji',       '⚪도지', '시가-종가 차이가 당일 고가-저가 범위의 5% 이내 — 방향성 상실', null],
       ].filter(([k]) => w[k] && _w2ss[k])
        .map(([,l,t,c]) => `<span${t ? ` title="${escAttr(t)}"` : ''} style="background:${c?c.bg:'rgba(188,140,255,.15)'};color:${c?c.fg:'var(--purple)'};border:1px solid ${c?c.bd:'rgba(188,140,255,.3)'};border-radius:4px;font-size:9px;font-weight:700;padding:1px 5px;white-space:nowrap;flex-shrink:0">${l}</span>`)
        .join('');
@@ -5319,7 +5354,7 @@ function renderWatchlist() {
               ${bpsHtml}
             </div>
             <div class="wc-actions no-print" style="margin-left:auto">
-              ${trendBadge}${trendDistBadge}${w2SigBadges}
+              ${w2ComboBadges}${trendBadge}${trendDistBadge}${w2SigBadges}
               <button class="btn btn-ghost btn-sm" onclick="toggleWatchDetail(${w.id})" title="상세설정">⚙</button>
               <button class="btn btn-ghost btn-sm" onclick="deleteWatch(${w.id})" title="삭제" style="color:var(--red)">×</button>
             </div>
@@ -5379,7 +5414,7 @@ function renderWatchlist() {
             ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
           </div>
           <div class="wc-actions no-print" style="margin-left:auto">
-            ${trendBadge}${trendDistBadge}${w2SigBadges}
+            ${w2ComboBadges}${trendBadge}${trendDistBadge}${w2SigBadges}
             ${(wGrp==='watch1'||wGrp==='watch2') ? `<button class="btn btn-ghost btn-sm" onclick="moveWatchToReady(${w.id})" title="매수대기로 이동" style="color:var(--yellow);white-space:nowrap;font-size:11px">→ 매수대기</button>` : ''}
             ${wGrp==='ready' ? `
               <button class="btn btn-ghost btn-sm" onclick="moveWatchBackTo(${w.id},'watch1')" title="관찰1로 되돌리기" style="color:var(--blue);white-space:nowrap;font-size:11px">← 관찰1</button>
