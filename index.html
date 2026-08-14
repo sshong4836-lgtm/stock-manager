@@ -1811,7 +1811,16 @@
           </div>
           <div class="form-group">
             <label>프록시 서버 URL</label>
-            <input type="text" id="kw-proxy" placeholder="http://192.168.200.124:3000" style="font-family:monospace;font-size:12px">
+            <input type="text" id="kw-proxy" placeholder="http://192.168.200.124:3000" style="font-family:monospace;font-size:12px"
+              oninput="onKwProxyInput()">
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;cursor:pointer;margin-top:2px">
+              <input type="checkbox" id="kw-proxy-disable" onchange="onKwProxyDisableToggle()" style="width:auto;margin:0">
+              <span>프록시 사용 안 함 (키움 API 직접 호출)</span>
+            </label>
+            <div style="font-size:11px;color:var(--muted);line-height:1.5">
+              URL 칸을 비운 채 저장해도 <strong>기존 주소는 그대로 유지</strong>됩니다.
+              정말로 지우려면 위 체크박스를 켜고 저장하세요.
+            </div>
           </div>
         </div>
         <div class="row-flex" style="margin-top:16px;gap:8px;flex-wrap:wrap">
@@ -3621,9 +3630,7 @@ async function _fetchOneEtfAccountPrices(acctId, onStatus) {
 }
 
 async function fetchEtfPrices(acctId) {
-  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
-    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
-  }
+  if (!_guardKiwoomConfig()) return;
 
   const hMap    = calcEtfH(acctId);
   const holdings = Object.entries(hMap).filter(([,h]) => h.qty > 0.0001).map(([s]) => s);
@@ -3650,9 +3657,7 @@ async function fetchEtfPrices(acctId) {
 
 // ── ETF매매 탭 "전체 시세 가져오기": 5개 계좌를 순회하며 조회 후 합산 요약 재계산 ──
 async function fetchAllEtfPrices() {
-  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
-    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
-  }
+  if (!_guardKiwoomConfig()) return;
 
   const btn = document.getElementById('etf-fetch-all-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 전체 조회 중...'; }
@@ -7523,9 +7528,7 @@ async function searchEtfWatchTicker() {
 }
 
 async function fetchAllEtfWatchPrices() {
-  if (!kiwoomSettings.token && !kiwoomSettings.proxyUrl) {
-    toast('설정 탭에서 토큰 발급 후 사용하세요.', 'red'); return;
-  }
+  if (!_guardKiwoomConfig()) return;
 
   const targets = etfWatchlist.filter(e => e.ticker);
   if (!targets.length) { toast('종목코드가 없습니다.', 'red'); return; }
@@ -7878,7 +7881,15 @@ function loadKiwoomSettingsUI() {
   if (kiwoomSettings.appkey)    keyEl.value = kiwoomSettings.appkey;
   const secret = kiwoomSettings.secretkey || kiwoomSettings.appsecret || '';
   if (secret) document.getElementById('kw-appsecret').value = secret;
-  if (kiwoomSettings.proxyUrl)  document.getElementById('kw-proxy').value     = kiwoomSettings.proxyUrl;
+  const proxyEl = document.getElementById('kw-proxy');
+  const disEl   = document.getElementById('kw-proxy-disable');
+  proxyEl.value = kiwoomSettings.proxyUrl || '';
+  if (disEl) {
+    // 저장된 설정이 아예 없는 초기 상태까지 "사용 안 함"으로 체크해두면 오해를 부르므로,
+    // appkey가 저장된 적 있는데 proxyUrl만 없는 경우에만 명시적 해제 상태로 본다.
+    disEl.checked = !kiwoomSettings.proxyUrl && !!kiwoomSettings.appkey;
+    proxyEl.disabled = disEl.checked;
+  }
   _updateKiwoomStatus();
 }
 
@@ -7900,15 +7911,53 @@ function _updateKiwoomStatus() {
   }
 }
 
+// 프록시 URL 칸에 뭔가 입력하면 "사용 안 함" 체크는 자동 해제 (둘이 모순되면 안 됨)
+function onKwProxyInput() {
+  const cb = document.getElementById('kw-proxy-disable');
+  if (cb && cb.checked && document.getElementById('kw-proxy').value.trim()) {
+    cb.checked = false;
+    document.getElementById('kw-proxy').disabled = false;
+  }
+}
+
+function onKwProxyDisableToggle() {
+  const cb  = document.getElementById('kw-proxy-disable');
+  const inp = document.getElementById('kw-proxy');
+  inp.disabled = cb.checked;
+  if (cb.checked) inp.value = '';
+}
+
 function saveKiwoomSettings() {
   const appkey    = document.getElementById('kw-appkey').value.trim();
   const secretkey = document.getElementById('kw-appsecret').value.trim();
-  const proxyUrl  = document.getElementById('kw-proxy').value.trim().replace(/\/$/, '');
+  const typedUrl  = document.getElementById('kw-proxy').value.trim().replace(/\/$/, '');
+  const disabled  = document.getElementById('kw-proxy-disable').checked;
   if (!appkey || !secretkey) { toast('App Key와 App Secret을 모두 입력하세요.', 'red'); return; }
-  kiwoomSettings = { appkey, secretkey, ...(proxyUrl && { proxyUrl }), ...(kiwoomSettings.token && { token: kiwoomSettings.token }) };
+
+  // proxyUrl 결정 규칙 (2026-08-14 사고 대응):
+  //   예전에는 칸이 비면 무조건 proxyUrl을 빼버려서, App Key만 다시 저장해도 프록시 주소가
+  //   조용히 사라졌다. 그러면 모든 시세 조회가 api.kiwoom.com으로 직접 나가 1513으로 실패한다.
+  //   이제 빈 칸은 "변경 없음"으로 보고 기존 값을 유지하며, 삭제는 체크박스로만 명시적으로 한다.
+  let proxyUrl;
+  if (disabled)       proxyUrl = '';                                  // 명시적 해제
+  else if (typedUrl)  proxyUrl = typedUrl;                            // 새 주소 입력
+  else                proxyUrl = kiwoomSettings.proxyUrl || '';       // 빈 칸 = 기존 유지
+
+  const keptExisting = !disabled && !typedUrl && !!kiwoomSettings.proxyUrl;
+  const removed      = disabled && !!kiwoomSettings.proxyUrl;
+
+  kiwoomSettings = {
+    appkey, secretkey,
+    ...(proxyUrl && { proxyUrl }),
+    ...(kiwoomSettings.token && { token: kiwoomSettings.token })
+  };
   localStorage.setItem('sm-kiwoom', JSON.stringify(kiwoomSettings));
+  loadKiwoomSettingsUI();   // 유지된 proxyUrl을 입력칸에 다시 채워 현재 상태가 눈에 보이게
   _updateKiwoomStatus();
-  toast('키움 API 설정이 저장되었습니다.', 'green');
+
+  if (keptExisting)  toast(`설정 저장됨 · 기존 프록시 주소 유지 (${proxyUrl})`, 'green');
+  else if (removed)  toast('설정 저장됨 · 프록시 사용 안 함으로 변경되었습니다.', 'yellow');
+  else               toast('키움 API 설정이 저장되었습니다.', 'green');
 }
 
 function clearKiwoomSettings() {
@@ -7929,6 +7978,28 @@ function clearKiwoomSettings() {
 function _kiwoomUrl(path) {
   const base = kiwoomSettings.proxyUrl || KIWOOM_BASE;
   return base + path;
+}
+
+// ── 시세 조회 전 설정 점검 ──
+// proxyUrl도 token도 없으면 브라우저가 api.kiwoom.com을 직접 호출하는데, 이때 authorization
+// 헤더가 없어 키움이 "1513:Http Header에 authorization 필드가 설정되어 있어야 합니다"로 거절한다.
+// 2026-08-14에 실제로 이 상태가 됐을 때 원인이 드러나지 않아 진단에 시간이 걸렸으므로,
+// 조회를 시작하기 전에 무엇이 빠졌는지 정확히 알려준다.
+const KIWOOM_NO_PROXY_MSG =
+  '프록시 서버 URL이 설정되지 않았습니다. 설정 탭 → 키움 API에서 프록시 서버 URL을 입력하고 저장하세요.';
+
+function _kiwoomConfigError() {
+  if (kiwoomSettings.proxyUrl) return null;   // 프록시 경유 — 서버가 토큰을 붙여준다
+  if (kiwoomSettings.token)    return null;   // 직접 호출 + 토큰 보유
+  return KIWOOM_NO_PROXY_MSG;
+}
+
+// 조회 버튼 진입점용 — 문제가 있으면 토스트를 띄우고 false 반환
+function _guardKiwoomConfig() {
+  const err = _kiwoomConfigError();
+  if (!err) return true;
+  toast(err, 'red', 15000);
+  return false;
 }
 
 async function _kiwoomFetch(path, options = {}) {
@@ -7995,6 +8066,9 @@ function _toKiwoomCode(ticker) {
 
 // ── 단일 종목 현재가 조회 ──
 async function _kiwoomPrice(stockCode) {
+  // 설정이 빠진 상태면 키움의 1513 오류 대신 원인이 드러나는 메시지로 즉시 실패시킨다
+  const cfgErr = _kiwoomConfigError();
+  if (cfgErr) throw new Error(cfgErr);
   // proxyUrl 사용 시 서버가 자체 토큰으로 처리하므로 authorization 헤더 불필요
   const useProxy = !!kiwoomSettings.proxyUrl;
   const headers = {
