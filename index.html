@@ -479,6 +479,54 @@
     .j-watch-dd-item .jdd-name { font-weight:600; flex-shrink:0; }
     .j-watch-dd-item .jdd-tag  { font-size:11px; color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .j-watch-dd-item .jdd-price{ font-size:11px; color:var(--blue); flex-shrink:0; }
+
+    /* ── 신규 ETF 스크리닝 대기소 카드 ── */
+    .etfs-card {
+      background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+      padding:14px 16px; transition:border-color .15s, opacity .15s;
+    }
+    .etfs-card:hover { border-color:var(--blue); }
+    /* 매수완료 = 이미 산 것 → 참고용으로만 남기고 시각적 비중을 낮춘다 */
+    .etfs-card.etfs-done { opacity:.45; filter:grayscale(.6); }
+    .etfs-card.etfs-done:hover { opacity:.85; filter:none; }
+    .etfs-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+    .etfs-name { font-size:15px; font-weight:700; }
+    .etfs-code { font-size:11px; font-family:monospace; color:var(--muted);
+                 background:var(--bg3); border:1px solid var(--border); border-radius:4px; padding:2px 6px; }
+    /* 총보수 vs 실부담비용률 — 혼동 방지를 위해 항상 나란히 2칸 */
+    .etfs-cost { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; margin-bottom:10px; }
+    .etfs-cost-box {
+      background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+    }
+    .etfs-cost-box.etfs-cost-real { border-color:var(--orange); }
+    .etfs-cost-label { font-size:10px; color:var(--muted); margin-bottom:2px; }
+    .etfs-cost-val   { font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; }
+    .etfs-cost-sub   { font-size:10px; color:var(--muted); margin-top:1px; }
+    .etfs-cost-gap {
+      display:flex; flex-direction:column; justify-content:center; align-items:center;
+      padding:0 10px; font-size:11px; color:var(--orange); font-weight:700; text-align:center;
+    }
+    .etfs-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px 14px; margin-bottom:10px; }
+    .etfs-f-label { font-size:10px; color:var(--muted); }
+    .etfs-f-val   { font-size:13px; font-weight:600; }
+    .etfs-overlap {
+      background:rgba(240,136,62,.12); border:1px solid rgba(240,136,62,.35); border-radius:6px;
+      padding:6px 10px; font-size:12px; color:var(--orange); margin-bottom:10px;
+    }
+    .etfs-memo {
+      width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:6px;
+      color:var(--text); font-size:12px; padding:7px 9px; resize:vertical; font-family:inherit;
+      min-height:46px; /* 전역 textarea min-height:80px 상쇄 */
+    }
+    .etfs-memo:focus { outline:none; border-color:var(--blue); }
+    .etfs-status-sel {
+      background:var(--bg3); border:1px solid var(--border); border-radius:6px;
+      color:var(--text); font-size:12px; font-weight:700; padding:4px 8px; cursor:pointer;
+    }
+    @media (max-width:600px) {
+      .etfs-cost { grid-template-columns:1fr 1fr; }
+      .etfs-cost-gap { grid-column:1/-1; flex-direction:row; gap:4px; padding:0; }
+    }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -1452,17 +1500,21 @@
 ══════════════════════════════ -->
 <div id="tab-etfwatch" class="tab-content">
 
-  <!-- 역할 안내 -->
-  <div class="info-note info-note-blue" style="margin-bottom:12px">
-    아직 매수하지 않은 ETF를 모니터링하는 공간입니다.<br>
-    매수 타이밍 포착 후 <strong>ETF탭</strong>으로 이동하세요.
-  </div>
-
   <!-- 서브탭 -->
   <div class="sub-tabs" id="etfw-group-tabs">
     <button class="sub-tab-btn active" onclick="switchEtfWatchGroup(this,'all')">전체</button>
     <button class="sub-tab-btn" onclick="switchEtfWatchGroup(this,'ready')">🟡 매수대기</button>
     <button class="sub-tab-btn" onclick="switchEtfWatchGroup(this,'watch')">🔵 관찰중</button>
+    <button class="sub-tab-btn" onclick="switchEtfWatchGroup(this,'screening')">🆕 스크리닝 대기소</button>
+  </div>
+
+  <!-- ── 기존 관찰 리스트(시세 추적) ── -->
+  <div id="etfw-classic">
+
+  <!-- 역할 안내 -->
+  <div class="info-note info-note-blue" style="margin-bottom:12px">
+    아직 매수하지 않은 ETF를 모니터링하는 공간입니다.<br>
+    매수 타이밍 포착 후 <strong>ETF탭</strong>으로 이동하세요.
   </div>
 
   <!-- 추가 폼 -->
@@ -1505,6 +1557,104 @@
 
   <!-- 종목 리스트 -->
   <div class="wc-list" id="etfw-list"></div>
+
+  </div><!-- /#etfw-classic -->
+
+  <!-- ══ 신규 ETF 스크리닝 대기소 ══ -->
+  <div id="etfs-section" style="display:none">
+
+    <div class="info-note info-note-blue" style="margin-bottom:12px">
+      새로 발견한 ETF 후보의 스펙을 기록해두는 대기소입니다.
+      <strong>총보수</strong>(표면 수수료)와 <strong>실부담비용률</strong>(실제로 나가는 비용)은
+      서로 다른 값이므로 항상 둘 다 확인하세요.<br>
+      데이터는 서버(<code>etfScreening.json</code>)에 저장되며 브라우저와 무관하게 보존됩니다.
+    </div>
+
+    <!-- 추가 폼 (접이식) -->
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;gap:8px">
+        <span>새 후보 추가</span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="toggleEtfScrForm()"
+          id="etfs-form-toggle">+ 펼치기</button>
+      </div>
+      <div id="etfs-form" style="display:none">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>ETF명 <span style="color:var(--red)">*</span></label>
+            <input type="text" id="etfs-etfName" placeholder="예: SOL 국제금커버드콜액티브">
+          </div>
+          <div class="form-group">
+            <label>종목코드</label>
+            <input type="text" id="etfs-stockCode" placeholder="예: 0022T0">
+          </div>
+          <div class="form-group">
+            <label>발견일</label>
+            <input type="date" id="etfs-discoveredDate">
+          </div>
+          <div class="form-group">
+            <label>총보수 (%)</label>
+            <input type="number" step="0.0001" id="etfs-totalFeeRate" placeholder="0.45">
+          </div>
+          <div class="form-group">
+            <label>실부담비용률 (%)</label>
+            <input type="number" step="0.0001" id="etfs-realCostRate" placeholder="0.5697">
+          </div>
+          <div class="form-group">
+            <label>순자산(AUM)</label>
+            <input type="text" id="etfs-aum" placeholder="예: 325억원">
+          </div>
+          <div class="form-group">
+            <label>설정일</label>
+            <input type="text" id="etfs-listedDate" placeholder="예: 2024-05">
+          </div>
+          <div class="form-group">
+            <label>자산유형</label>
+            <input type="text" id="etfs-assetType" placeholder="예: 금·커버드콜">
+          </div>
+          <div class="form-group">
+            <label>복제방법</label>
+            <input type="text" id="etfs-replicationMethod" placeholder="예: 실물 / 합성">
+          </div>
+          <div class="form-group">
+            <label>1년 분배율 (%)</label>
+            <input type="number" step="0.01" id="etfs-dividendYield1Y" placeholder="12.79">
+          </div>
+          <div class="form-group">
+            <label>상태</label>
+            <select id="etfs-status">
+              <option value="검토중">검토중</option>
+              <option value="매수완료">매수완료</option>
+              <option value="보류">보류</option>
+              <option value="제외">제외</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>중복/유사 (기존 보유와 겹치는 부분)</label>
+            <input type="text" id="etfs-overlapsWith" placeholder="예: 기존 보유 SOL 국제금커버드콜액티브와 동일">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>메모</label>
+            <textarea id="etfs-memo" rows="2" placeholder="예: 최근 노동시장 약화로 반등 중, 일부만 매수 고려"></textarea>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="addEtfScreening()">+ 후보 추가</button>
+      </div>
+    </div>
+
+    <!-- 상태 필터 + 건수 -->
+    <div class="section-header" style="margin-bottom:8px;gap:8px">
+      <div class="sub-tabs" id="etfs-filter-tabs" style="margin:0">
+        <button class="sub-tab-btn active" onclick="switchEtfScrFilter(this,'검토중')">검토중만 보기</button>
+        <button class="sub-tab-btn" onclick="switchEtfScrFilter(this,'all')">전체 보기</button>
+      </div>
+      <span id="etfs-count" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+      <button class="btn btn-ghost btn-sm no-print" onclick="loadEtfScreening()">🔄 새로고침</button>
+    </div>
+
+    <!-- 카드 리스트 -->
+    <div id="etfs-list" style="display:flex;flex-direction:column;gap:10px"></div>
+
+  </div><!-- /#etfs-section -->
 
 </div>
 
@@ -1931,7 +2081,7 @@ function switchTab(btn, name) {
   if (name === 'etfmgmt')  renderEtfTradeTab();
   if (name === 'daytrade') renderDayTrade();
   if (name === 'futures')  { renderFutures(); loadSectorInvestor(); }
-  if (name === 'etfwatch') renderEtfWatch();
+  if (name === 'etfwatch') { _etfwGroup === 'screening' ? loadEtfScreening() : renderEtfWatch(); }
   if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); loadBackupList('watchlist'); loadBackupList('etf'); }
   if (name === 'news')     loadNewsTab();
 }
@@ -6958,6 +7108,13 @@ function switchEtfWatchGroup(btn, group) {
   _etfwGroup = group;
   document.querySelectorAll('#etfw-group-tabs .sub-tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+
+  // 'screening'은 시세 추적 리스트가 아니라 별도 섹션 → 화면 자체를 전환한다
+  const isScr = group === 'screening';
+  document.getElementById('etfw-classic').style.display = isScr ? 'none' : '';
+  document.getElementById('etfs-section').style.display = isScr ? '' : 'none';
+  if (isScr) { loadEtfScreening(); return; }
+
   renderEtfWatch();
 }
 
@@ -7328,6 +7485,243 @@ async function fetchAllEtfWatchPrices() {
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
   toast(`시세 갱신 완료: ${ok}건 성공${fail ? ', '+fail+'건 실패' : ''}`);
+}
+
+// ══════════════════════════════════════════════════════
+// 신규 ETF 스크리닝 대기소 (ETF관찰 → 🆕 스크리닝 대기소)
+// ── 저장소는 서버 ~/proxy/etfScreening.json 단일 소스.
+//    localStorage를 쓰지 않으므로 save()/scheduleEtfServerBackup() 경로와 무관하다.
+// ══════════════════════════════════════════════════════
+
+let etfScreening   = [];        // 서버에서 받아온 후보 배열
+let _etfScrFilter  = '검토중';  // '검토중' | 'all' — 기본은 검토중만 보기
+
+const ETF_SCR_STATUS = ['검토중', '매수완료', '보류', '제외'];
+const ETF_SCR_STATUS_COLOR = {
+  '검토중':  { bg:'rgba(88,166,255,.18)',  fg:'var(--blue)'   },
+  '매수완료': { bg:'rgba(63,185,80,.18)',   fg:'var(--green)'  },
+  '보류':    { bg:'rgba(227,179,65,.18)',  fg:'var(--yellow)' },
+  '제외':    { bg:'rgba(139,148,158,.18)', fg:'var(--muted)'  },
+};
+
+function etfScrApi(path = '') {
+  return `${homeApiBase()}/api/etf-screening${path}`;
+}
+
+async function loadEtfScreening() {
+  const container = document.getElementById('etfs-list');
+  try {
+    const res = await fetch(etfScrApi(), { headers: { 'ngrok-skip-browser-warning': '1' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    etfScreening = await res.json();
+    renderEtfScreening();
+  } catch (e) {
+    console.error('ETF 스크리닝 조회 실패:', e);
+    container.innerHTML = `<div class="empty">서버에서 목록을 불러오지 못했습니다 (${escHtml(e.message)}).<br>
+      설정 탭의 프록시 주소를 확인하세요.</div>`;
+    document.getElementById('etfs-count').textContent = '';
+  }
+}
+
+function switchEtfScrFilter(btn, filter) {
+  _etfScrFilter = filter;
+  document.querySelectorAll('#etfs-filter-tabs .sub-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderEtfScreening();
+}
+
+function toggleEtfScrForm() {
+  const form = document.getElementById('etfs-form');
+  const open = form.style.display === 'none';
+  form.style.display = open ? '' : 'none';
+  document.getElementById('etfs-form-toggle').textContent = open ? '− 접기' : '+ 펼치기';
+  if (open) document.getElementById('etfs-etfName').focus();
+}
+
+// 숫자 필드 표시: 값이 없으면 '-' (0과 빈값을 구분해야 하므로 == null 체크)
+function _etfScrPct(v) {
+  return (v === '' || v === null || v === undefined || isNaN(Number(v))) ? null : Number(v);
+}
+
+function renderEtfScreening() {
+  const list = _etfScrFilter === 'all'
+    ? etfScreening
+    : etfScreening.filter(e => e.status === _etfScrFilter);
+
+  const doneCount = etfScreening.filter(e => e.status === '매수완료').length;
+  document.getElementById('etfs-count').textContent =
+    `${list.length}개 표시 / 전체 ${etfScreening.length}개 (매수완료 ${doneCount})`;
+
+  const container = document.getElementById('etfs-list');
+  if (!list.length) {
+    container.innerHTML = `<div class="empty">${_etfScrFilter === 'all'
+      ? '등록된 후보가 없습니다. 위 폼에서 추가하세요.'
+      : '검토중인 후보가 없습니다. 「전체 보기」로 확인해보세요.'}</div>`;
+    return;
+  }
+
+  const eh = escHtml;
+  // onclick 안 JS 문자열 리터럴용 — 작은따옴표/역슬래시까지 막아야 ETF명에 '가 있어도 안 깨진다
+  const ea = s => escAttr(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+
+  container.innerHTML = list.map(e => {
+    const sc  = ETF_SCR_STATUS_COLOR[e.status] || ETF_SCR_STATUS_COLOR['검토중'];
+    const fee  = _etfScrPct(e.totalFeeRate);
+    const real = _etfScrPct(e.realCostRate);
+    const yld  = _etfScrPct(e.dividendYield1Y);
+
+    // 총보수 vs 실부담비용률 차이 — 실제로 더 나가는 비용이 얼마인지 바로 보이게
+    let gapHtml = '<div class="etfs-cost-gap"></div>';
+    if (fee !== null && real !== null) {
+      const gap = real - fee;
+      gapHtml = `<div class="etfs-cost-gap">
+        <span>${gap >= 0 ? '+' : ''}${gap.toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}%p</span>
+        <span style="color:var(--muted);font-weight:400">실제 추가부담</span>
+      </div>`;
+    }
+
+    const field = (label, val) => `
+      <div>
+        <div class="etfs-f-label">${label}</div>
+        <div class="etfs-f-val">${val}</div>
+      </div>`;
+
+    const statusOpts = ETF_SCR_STATUS
+      .map(s => `<option value="${s}"${s === e.status ? ' selected' : ''}>${s}</option>`).join('');
+
+    return `
+    <div class="etfs-card${e.status === '매수완료' ? ' etfs-done' : ''}">
+      <div class="etfs-head">
+        <span class="etfs-name">${eh(e.etfName)}</span>
+        ${e.stockCode ? `<span class="etfs-code">${eh(e.stockCode)}</span>` : ''}
+        <span class="badge" style="background:${sc.bg};color:${sc.fg};font-size:11px;padding:3px 8px">${eh(e.status)}</span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <select class="etfs-status-sel" title="상태 변경"
+            onchange="updateEtfScrField('${ea(e.id)}','status',this.value)">${statusOpts}</select>
+          <button class="btn btn-ghost btn-sm" title="삭제"
+            onclick="deleteEtfScreening('${ea(e.id)}','${ea(e.etfName)}')">🗑</button>
+        </div>
+      </div>
+
+      <div class="etfs-cost">
+        <div class="etfs-cost-box">
+          <div class="etfs-cost-label">총보수 (표면 수수료)</div>
+          <div class="etfs-cost-val">${fee !== null ? fee + '%' : '-'}</div>
+          <div class="etfs-cost-sub">운용·판매·수탁보수 합계</div>
+        </div>
+        <div class="etfs-cost-box etfs-cost-real">
+          <div class="etfs-cost-label">실부담비용률 (실제 부담)</div>
+          <div class="etfs-cost-val" style="color:var(--orange)">${real !== null ? real + '%' : '-'}</div>
+          <div class="etfs-cost-sub">기타비용·매매중개수수료 포함</div>
+        </div>
+        ${gapHtml}
+      </div>
+
+      <div class="etfs-grid">
+        ${field('자산유형',   e.assetType ? eh(e.assetType) : '-')}
+        ${field('복제방법',   e.replicationMethod ? eh(e.replicationMethod) : '-')}
+        ${field('설정일',     e.listedDate ? eh(e.listedDate) : '-')}
+        ${field('순자산(AUM)', e.aum ? eh(e.aum) : '-')}
+        ${field('1년 분배율', yld !== null ? `<span style="color:var(--green)">${yld}%</span>` : '-')}
+        ${field('발견일',     e.discoveredDate ? eh(e.discoveredDate) : '-')}
+      </div>
+
+      ${e.overlapsWith ? `<div class="etfs-overlap">⚠️ 중복 검토: ${eh(e.overlapsWith)}</div>` : ''}
+
+      <div>
+        <div class="etfs-f-label" style="margin-bottom:3px">메모 (수정 후 다른 곳 클릭하면 저장)</div>
+        <textarea class="etfs-memo" rows="2" placeholder="메모를 입력하세요"
+          onblur="updateEtfScrField('${ea(e.id)}','memo',this.value,this)">${eh(e.memo)}</textarea>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// status/memo 등 단일 필드 인라인 수정 → 서버 PATCH
+async function updateEtfScrField(id, field, value, el) {
+  const item = etfScreening.find(e => e.id === id);
+  if (!item) return;
+  if (String(item[field] ?? '') === String(value)) return; // 변경 없으면 요청 스킵 (memo blur 대비)
+  const prev = item[field];
+  try {
+    const res = await fetch(etfScrApi('/' + encodeURIComponent(id)), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify({ [field]: value })
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'HTTP ' + res.status);
+    item[field] = value;
+    if (field === 'status') {
+      renderEtfScreening();   // 흐림 처리·필터 결과가 바뀌므로 다시 그린다
+      toast(`${item.etfName} → ${value}`, 'green');
+    } else {
+      toast('저장되었습니다.', 'green', 2000);
+    }
+  } catch (e) {
+    item[field] = prev;
+    if (el) el.value = prev ?? '';
+    toast('저장 실패: ' + e.message, 'red');
+    if (field === 'status') renderEtfScreening();
+  }
+}
+
+async function addEtfScreening() {
+  const val = id => document.getElementById('etfs-' + id).value.trim();
+  const etfName = val('etfName');
+  if (!etfName) { toast('ETF명을 입력하세요.', 'red'); return; }
+
+  const stockCode = val('stockCode');
+  if (stockCode) {
+    const dup = etfScreening.find(e => e.stockCode === stockCode);
+    if (dup && !confirm(`종목코드 ${stockCode}는 이미 「${dup.etfName}」로 등록돼 있습니다.\n그래도 추가할까요?`)) return;
+  }
+
+  const body = {
+    etfName, stockCode,
+    discoveredDate:     val('discoveredDate'),
+    totalFeeRate:       val('totalFeeRate')   === '' ? '' : Number(val('totalFeeRate')),
+    realCostRate:       val('realCostRate')   === '' ? '' : Number(val('realCostRate')),
+    aum:                val('aum'),
+    listedDate:         val('listedDate'),
+    assetType:          val('assetType'),
+    replicationMethod:  val('replicationMethod'),
+    dividendYield1Y:    val('dividendYield1Y') === '' ? '' : Number(val('dividendYield1Y')),
+    overlapsWith:       val('overlapsWith'),
+    status:             document.getElementById('etfs-status').value,
+    memo:               document.getElementById('etfs-memo').value.trim(),
+  };
+
+  try {
+    const res = await fetch(etfScrApi(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'HTTP ' + res.status);
+    ['etfName','stockCode','discoveredDate','totalFeeRate','realCostRate','aum','listedDate',
+     'assetType','replicationMethod','dividendYield1Y','overlapsWith','memo']
+      .forEach(f => document.getElementById('etfs-' + f).value = '');
+    document.getElementById('etfs-status').value = '검토중';
+    toast(`${etfName} 추가 완료`, 'green');
+    await loadEtfScreening();
+  } catch (e) {
+    toast('추가 실패: ' + e.message, 'red');
+  }
+}
+
+async function deleteEtfScreening(id, name) {
+  if (!confirm(`「${name}」을(를) 목록에서 삭제할까요?\n(기록만 남기려면 상태를 '제외'로 바꾸세요)`)) return;
+  try {
+    const res = await fetch(etfScrApi('/' + encodeURIComponent(id)), {
+      method: 'DELETE',
+      headers: { 'ngrok-skip-browser-warning': '1' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    toast(`${name} 삭제됨`);
+    await loadEtfScreening();
+  } catch (e) {
+    toast('삭제 실패: ' + e.message, 'red');
+  }
 }
 
 // ══════════════════════════════════════════════════════
