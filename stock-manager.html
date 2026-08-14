@@ -527,6 +527,29 @@
       .etfs-cost { grid-template-columns:1fr 1fr; }
       .etfs-cost-gap { grid-column:1/-1; flex-direction:row; gap:4px; padding:0; }
     }
+
+    /* ── 외인·기관 매매상위 ── */
+    /* 2열 고정 — 왼쪽 외국인 / 오른쪽 기관, 윗줄 순매수 / 아랫줄 순매도로 짝이 맞아야 읽힌다.
+       auto-fit을 쓰면 넓은 화면에서 3+1로 깨져 짝이 어긋난다. */
+    #fo-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+    @media (max-width:820px) { #fo-grid { grid-template-columns:1fr; } }
+    .fo-panel { background:var(--bg3); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .fo-panel-head {
+      padding:8px 12px; font-size:13px; font-weight:700;
+      border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px;
+    }
+    /* 순매수=적색, 순매도=청색 — 앱 전체 등락 색 규칙(cc)과 동일 */
+    .fo-buy  .fo-panel-head { color:var(--red);  background:rgba(248,81,73,.10); }
+    .fo-sell .fo-panel-head { color:var(--blue); background:rgba(88,166,255,.10); }
+    .fo-panel table { width:100%; border-collapse:collapse; }
+    .fo-panel td { padding:5px 10px; font-size:12px; border-bottom:1px solid rgba(48,54,61,.5); }
+    .fo-panel tr:last-child td { border-bottom:none; }
+    .fo-panel tr:hover td { background:rgba(255,255,255,.03); }
+    .fo-rank { width:26px; color:var(--muted); font-size:11px; text-align:right; font-variant-numeric:tabular-nums; }
+    .fo-name { font-weight:600; }
+    .fo-code { font-size:10px; color:var(--muted); font-family:monospace; margin-left:4px; }
+    .fo-amt  { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .fo-qty  { text-align:right; font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
   </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
@@ -567,6 +590,7 @@
   <button class="tab-btn"        onclick="switchTab(this,'etfwatch')">🔍 ETF관찰</button>
   <button class="tab-btn"        onclick="switchTab(this,'alert')">🔔 장시간 알림</button>
   <button class="tab-btn"        onclick="switchTab(this,'futures')">⚡ 시장동향</button>
+  <button class="tab-btn"        onclick="switchTab(this,'frgnorgn')">🌐 외인·기관</button>
   <button class="tab-btn"        onclick="switchTab(this,'daytrade')">⚡ 단타수익</button>
   <button class="tab-btn"        onclick="switchTab(this,'marketcap');loadMarketCap(false)">📈 시총순위</button>
   <button class="tab-btn"        onclick="switchTab(this,'settings')">⚙️ 설정</button>
@@ -1446,6 +1470,39 @@
 </div>
 
 <!-- ══════════════════════════════
+     TAB : 외인·기관 매매상위
+══════════════════════════════ -->
+<div id="tab-frgnorgn" class="tab-content">
+  <div class="card">
+    <div class="section-header" style="margin-bottom:0">
+      <div class="card-title" style="margin:0">🌐 외국인·기관 매매상위
+        <span id="fo-date-label" style="font-size:11px;color:var(--muted);font-weight:400"></span>
+      </div>
+      <div class="row-flex" style="gap:8px">
+        <span id="fo-updated" style="font-size:11px;color:var(--muted);align-self:center"></span>
+        <button class="btn btn-ghost btn-sm no-print" onclick="loadFrgnOrgn(true)">🔄 새로고침</button>
+      </div>
+    </div>
+    <div class="info-note">
+      HTS <strong>[0785] 외국인기관매매상위</strong>와 같은 데이터입니다. 금액 단위 <strong>억원</strong>, 상위 25종목.<br>
+      기관 수치는 장 마감 직후 <strong>잠정치</strong>이며 나중에 확정치로 소폭 정정될 수 있습니다.
+    </div>
+
+    <div class="mc-sub-tabs" style="margin-top:6px">
+      <button class="mc-sub-btn active" id="fo-btn-kospi"  onclick="switchFoMarket('kospi')">🔵 코스피</button>
+      <button class="mc-sub-btn"        id="fo-btn-kosdaq" onclick="switchFoMarket('kosdaq')">🟢 코스닥</button>
+      <span style="flex:1"></span>
+      <button class="mc-sub-btn active" id="fo-btn-today" onclick="switchFoDay(false)">당일</button>
+      <button class="mc-sub-btn"        id="fo-btn-prev"  onclick="switchFoDay(true)">전일</button>
+    </div>
+
+    <div id="fo-grid">
+      <div class="empty" style="grid-column:1/-1">로딩 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
      TAB : 시총순위
 ══════════════════════════════ -->
 <div id="tab-marketcap" class="tab-content">
@@ -2081,6 +2138,7 @@ function switchTab(btn, name) {
   if (name === 'etfmgmt')  renderEtfTradeTab();
   if (name === 'daytrade') renderDayTrade();
   if (name === 'futures')  { renderFutures(); loadSectorInvestor(); }
+  if (name === 'frgnorgn') loadFrgnOrgn();
   if (name === 'etfwatch') { _etfwGroup === 'screening' ? loadEtfScreening() : renderEtfWatch(); }
   if (name === 'settings') { loadTelegramSettingsUI(); loadKiwoomSettingsUI(); loadBackupList('watchlist'); loadBackupList('etf'); }
   if (name === 'news')     loadNewsTab();
@@ -7485,6 +7543,87 @@ async function fetchAllEtfWatchPrices() {
   save('etfwatchlist', etfWatchlist);
   renderEtfWatch();
   toast(`시세 갱신 완료: ${ok}건 성공${fail ? ', '+fail+'건 실패' : ''}`);
+}
+
+// ══════════════════════════════════════════════════════
+// 외국인·기관 매매상위 (HTS [0785] / 키움 ka90009)
+// 서버가 원시값을 억원·주 단위로 환산해서 내려준다 (환산 계수는 서버 주석 참고).
+// ══════════════════════════════════════════════════════
+
+let _foMarket = 'kospi';
+let _foPrev   = false;   // true면 조회일자 전일
+
+// 표시 순서: 순매수 2개를 먼저, 순매도 2개를 뒤에
+const FO_COLUMNS = [
+  { key: 'foreignBuy',  cls: 'fo-buy',  icon: '🌏' },
+  { key: 'orgnBuy',     cls: 'fo-buy',  icon: '🏛' },
+  { key: 'foreignSell', cls: 'fo-sell', icon: '🌏' },
+  { key: 'orgnSell',    cls: 'fo-sell', icon: '🏛' },
+];
+
+function switchFoMarket(market) {
+  _foMarket = market;
+  document.getElementById('fo-btn-kospi').classList.toggle('active', market === 'kospi');
+  document.getElementById('fo-btn-kosdaq').classList.toggle('active', market === 'kosdaq');
+  loadFrgnOrgn();
+}
+
+function switchFoDay(prev) {
+  _foPrev = prev;
+  document.getElementById('fo-btn-today').classList.toggle('active', !prev);
+  document.getElementById('fo-btn-prev').classList.toggle('active', prev);
+  loadFrgnOrgn();
+}
+
+async function loadFrgnOrgn(force) {
+  const grid = document.getElementById('fo-grid');
+  grid.innerHTML = '<div class="empty" style="grid-column:1/-1">로딩 중...</div>';
+  const qs = `market=${_foMarket}${_foPrev ? '&prev=1' : ''}${force ? '&_=' + Date.now() : ''}`;
+  try {
+    const res = await fetch(`${homeApiBase()}/api/foreign-orgn-top?${qs}`, {
+      headers: { 'ngrok-skip-browser-warning': '1' }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+    renderFrgnOrgn(data);
+  } catch (e) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">조회 실패: ${escHtml(e.message)}</div>`;
+    document.getElementById('fo-date-label').textContent = '';
+    document.getElementById('fo-updated').textContent = '';
+  }
+}
+
+function renderFrgnOrgn(data) {
+  const eh = escHtml;
+  const d = data.date || '';
+  const dateStr = d.length === 8 ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}` : d;
+  document.getElementById('fo-date-label').textContent =
+    `${dateStr}${data.prev ? ' 기준(전일)' : ''} · ${data.market === 'kospi' ? '코스피' : '코스닥'}`;
+  document.getElementById('fo-updated').textContent =
+    data.updatedAt ? '조회 ' + new Date(data.updatedAt).toLocaleTimeString('ko-KR') : '';
+
+  const grid = document.getElementById('fo-grid');
+  const panels = FO_COLUMNS.map(({ key, cls, icon }) => {
+    const col = data.columns?.[key];
+    const items = col?.items || [];
+    if (!items.length) {
+      return `<div class="fo-panel ${cls}">
+        <div class="fo-panel-head">${icon} ${eh(col?.label || key)}</div>
+        <div class="empty" style="padding:20px">데이터 없음</div></div>`;
+    }
+    const rows = items.map(it => `
+      <tr>
+        <td class="fo-rank">${it.rank}</td>
+        <td><span class="fo-name">${eh(it.name)}</span><span class="fo-code">${eh(it.code)}</span></td>
+        <td class="fo-amt">${fmtF(it.eok, 1)}억</td>
+        <td class="fo-qty">${fmt(it.shares)}주</td>
+      </tr>`).join('');
+    return `<div class="fo-panel ${cls}">
+      <div class="fo-panel-head">${icon} ${eh(col.label)}<span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--muted)">${items.length}종목</span></div>
+      <table><tbody>${rows}</tbody></table>
+    </div>`;
+  });
+  grid.innerHTML = panels.join('');
 }
 
 // ══════════════════════════════════════════════════════
