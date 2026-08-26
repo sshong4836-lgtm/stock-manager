@@ -5453,12 +5453,24 @@ function renderWatchlist() {
         : '전일 대비 거래량 배수 — 매일 17:50 장 마감 후(당일vs전일, 메인) 및 08:50 장 시작 전(전일vs전전일, 안전망) 배치 스냅샷 (장중 실시간 거래량과는 다름)';
       const _volColor = _isLiveVol ? { bg:'rgba(240,136,62,.18)', fg:'var(--orange)', bd:'rgba(240,136,62,.4)' } : null;
 
+      // 정배열 진입일 표시 — 배지 옆에 "M/D"를 작게 붙이고 경과일수로 색을 구분한다
+      // (1~3일=강조 red, 4~14일=중간 orange, 15일↑=연한 muted). 서버 watch2MaAlignDates.json 기반.
+      let _maAlignLabel = '📐정배열';
+      let _maAlignTitle = null;
+      if (_w2ss.maAlignSince) {
+        const _maDays = riskDaysBetween(_w2ss.maAlignSince, new Date());
+        const _maColor = _maDays <= 3 ? 'var(--red)' : _maDays <= 14 ? 'var(--orange)' : 'var(--muted)';
+        const [, _maM, _maD] = _w2ss.maAlignSince.split('-');
+        _maAlignLabel = `📐정배열 <span style="color:${_maColor};font-weight:800">${parseInt(_maM,10)}/${parseInt(_maD,10)}</span>`;
+        _maAlignTitle = `정배열 진입일 ${_w2ss.maAlignSince} (${_maDays}일째)`;
+      }
+
       w2SigBadges = [
         ['alertRsiOversold','📈RSI', null, null],
         ['alertVolume',     _volLabel, _volTitle, _volColor],
         ['alertBullish',    '🕯양봉', null, null],
         ['alertGoldenCross','🌟골든X', null, null],
-        ['alertMaAlignment','📐정배열', null, null],
+        ['alertMaAlignment', _maAlignLabel, _maAlignTitle, null],
         ['alertLongBull',   '🟥장대양봉', '양봉 + 몸통이 직전 20일 평균 몸통의 1.5배 이상', null],
         ['alertHammer',     '🔨망치', '아래꼬리 ≥ 몸통×2, 위꼬리 ≤ 몸통×40%, 최근 5일 종가 하락 중일 때만 유효', null],
         ['alertDoji',       '⚪도지', '시가-종가 차이가 당일 고가-저가 범위의 5% 이내 — 방향성 상실', null],
