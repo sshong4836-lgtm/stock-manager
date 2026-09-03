@@ -4693,9 +4693,9 @@ function moveWatchBackTo(id, group) {
 }
 
 // 관찰2 개별 알림 조건 키 — "N/9 조건 충족" 배지와 상세 체크박스가 같은 목록을 쓰도록 한 곳에서만 정의
-// (server.js WATCH2_SIGNAL_LABELS의 9개 키와 일치해야 함). 조합신호(🔥/💪/⚠️)는 개별 조건이 아니라
+// (server.js WATCH2_SIGNAL_LABELS의 10개 키와 일치해야 함). 조합신호(🔥/💪/⚠️)는 개별 조건이 아니라
 // 서버가 그 위에서 계산하는 별도 레이어라 여기 포함되지 않는다.
-const W2_ALERT_KEYS = ['alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend','alertLongBull','alertHammer','alertDoji'];
+const W2_ALERT_KEYS = ['alertRsiEnter','alertRsiOversold','alertVolume','alertBullish','alertGoldenCross','alertMaAlignment','alertTrend','alertLongBull','alertHammer','alertDoji'];
 
 // 조합신호 강조 배지 — 서버가 내려준 comboSignals(icon/label/isBuy)를 개별 배지 앞에 크게 표시.
 // 개별 조건 체크박스와 무관하게 항상 표시한다(조합 판정은 서버 전담이고, 놓치면 안 되는 신호라서).
@@ -5002,7 +5002,7 @@ function renderWatch2Top10() {
 }
 
 // 관찰2 정식 신호 정렬 우선순위 — 정배열/저항선돌파처럼 상태지속형 신호를 앞쪽에 노출 (server.js WATCH2_SIGNAL_SORT_ORDER와 동일)
-const W2_TRACKER_SIGNAL_ORDER = ['정배열', '저항선돌파', '골든크로스', 'RSI과매도탈출', '장대양봉', '망치형', '양봉전환', '도지캔들', '거래량급증'];
+const W2_TRACKER_SIGNAL_ORDER = ['정배열', '저항선돌파', '골든크로스', 'RSI과매도진입', 'RSI과매도탈출', '장대양봉', '망치형', '양봉전환', '도지캔들', '거래량급증'];
 let _watch2TrackerShowAll = false; // "지난 이력 보기" 토글 상태
 
 function toggleWatch2TrackerShowAll() {
@@ -5352,6 +5352,7 @@ function renderWatchlist() {
               <div id="w2-alert-body-${w.id}">
                 <div class="alert-checks-grid">
                   ${[
+                    ['alertRsiEnter',    '📉 RSI 과매도 진입 시 알림 (RSI 30 이하 최초 도달)'],
                     ['alertRsiOversold', '📈 RSI 과매도 탈출 시 알림'],
                     ['alertVolume',      '📊 거래량 급증 시 알림 (전일 대비 200% 이상)'],
                     ['alertBullish',     '🕯 양봉 전환 시 알림'],
@@ -5388,6 +5389,7 @@ function renderWatchlist() {
                   &nbsp;· 추세선돌파 (단독 긴급알림)<br>
                   📊 <b>일반알림 조건</b>:<br>
                   &nbsp;· 정배열 단독 진입<br>
+                  &nbsp;· RSI과매도진입 단독 (RSI 30 이하 최초 도달)<br>
                   &nbsp;· 위 조건 중 2개 이상 동시 충족<br>
                   ⭐ <b>조합신호</b> (개별 배지 앞에 강조 표시 + 전용 텔레그램):<br>
                   &nbsp;· 🔥 <b>강한매수</b> = 거래량 2배↑ + 장대양봉 <span style="color:var(--green)">(TOP10 +15점)</span><br>
@@ -5465,8 +5467,36 @@ function renderWatchlist() {
         _maAlignTitle = `정배열 진입일 ${_w2ss.maAlignSince} (${_maDays}일째)`;
       }
 
+      // RSI 과매도 진입 배지 — 정배열 진입일 표시(_maAlignLabel)와 동일한 패턴(배지 옆 "M/D" 표시)이되,
+      // 색상은 경과일이 아니라 RSI 깊이로 구분한다: 20~30=연한색, 10~20=중간색, 10 이하=진한 강조색.
+      // 서버 watch2RsiEnterDates.json 기반 진입일 + latestWatch2Signals.rsiValue 기반 실시간 수치.
+      let _rsiEnterLabel = '📉과매도';
+      let _rsiEnterTitle = null;
+      let _rsiEnterColor = null;
+      if (_w2ss.rsiValue != null) {
+        const _rv = _w2ss.rsiValue;
+        _rsiEnterColor = _rv <= 10
+          ? { bg:'rgba(248,81,73,.2)', fg:'var(--red)', bd:'rgba(248,81,73,.45)' }
+          : _rv <= 20
+          ? { bg:'rgba(240,136,62,.18)', fg:'var(--orange)', bd:'rgba(240,136,62,.4)' }
+          : { bg:'rgba(255,255,255,.06)', fg:'var(--muted)', bd:'rgba(255,255,255,.18)' };
+        let _rsiDateStr = '';
+        if (_w2ss.rsiEnterSince) {
+          const _rsiDays = riskDaysBetween(_w2ss.rsiEnterSince, new Date());
+          const [, _rM, _rD] = _w2ss.rsiEnterSince.split('-');
+          _rsiDateStr = ` <span style="opacity:.85">${parseInt(_rM,10)}/${parseInt(_rD,10)}</span>`;
+          _rsiEnterTitle = `RSI 과매도 진입일 ${_w2ss.rsiEnterSince} (${_rsiDays}일째) · 현재 RSI ${_rv.toFixed(1)}`;
+        } else {
+          _rsiEnterTitle = `현재 RSI ${_rv.toFixed(1)}`;
+        }
+        _rsiEnterLabel = `📉과매도 ${_rv.toFixed(0)}${_rsiDateStr}`;
+      }
+      // RSI 과매도 탈출 배지 — 기존 정적 라벨에 실제 회복 시점 RSI 수치를 붙여 표시
+      const _rsiExitLabel = _w2ss.rsiValue != null ? `📈RSI ${_w2ss.rsiValue.toFixed(1)}` : '📈RSI';
+
       w2SigBadges = [
-        ['alertRsiOversold','📈RSI', null, null],
+        ['alertRsiEnter',   _rsiEnterLabel, _rsiEnterTitle, _rsiEnterColor],
+        ['alertRsiOversold', _rsiExitLabel, null, null],
         ['alertVolume',     _volLabel, _volTitle, _volColor],
         ['alertBullish',    '🕯양봉', null, null],
         ['alertGoldenCross','🌟골든X', null, null],
