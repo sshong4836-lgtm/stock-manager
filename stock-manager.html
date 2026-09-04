@@ -4711,8 +4711,14 @@ function _buildW2ComboBadges(ss) {
     // 발동할 수 있어 개별 배지만 봐서는 왜 켜졌는지 알 수 없기 때문.
     const tip = `${c.desc} → ${c.label}`
       + (c.evidence ? `\n근거: ${c.evidence}` : '')
-      + (c.isBuy ? `\n(TOP10 점수 +${c.bonus})` : '\n— 매수신호 아님, 변동성 확대 주의');
-    return `<span title="${escAttr(tip)}" style="background:${col.bg};color:${col.fg};border:1px solid ${col.bd};border-radius:4px;font-size:10px;font-weight:800;padding:1px 6px;white-space:nowrap;flex-shrink:0">${c.icon}${escHtml(c.label)}</span>`;
+      + (c.isBuy ? `\n(TOP10 점수 +${c.bonus})` : '\n— 매수신호 아님, 변동성 확대 주의')
+      + (c.since ? `\n최초 발생일: ${c.since}${c.isNew ? ' (오늘 신규)' : ''}` : '');
+    // 최초 발생일(c.since, 현재는 🔥강한매수만 서버가 채워줌) — 오늘 처음 뜬 거면 "(신규)",
+    // 그 전부터 이어지는 발생이면 "M/D"를 배지 옆에 작게 붙인다.
+    const sinceLabel = c.since
+      ? (c.isNew ? ' <span style="opacity:.85">(신규)</span>' : ` <span style="opacity:.85">${parseInt(c.since.slice(5,7),10)}/${parseInt(c.since.slice(8,10),10)}</span>`)
+      : '';
+    return `<span title="${escAttr(tip)}" style="background:${col.bg};color:${col.fg};border:1px solid ${col.bd};border-radius:4px;font-size:10px;font-weight:800;padding:1px 6px;white-space:nowrap;flex-shrink:0">${c.icon}${escHtml(c.label)}${sinceLabel}</span>`;
   }).join('');
 }
 
