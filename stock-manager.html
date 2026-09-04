@@ -167,9 +167,6 @@
     .badge-etf    { background:rgba(240,136,62,.15);  color:var(--orange); font-size:10px; padding:2px 6px; }
     .badge-div    { background:rgba(227,179,65,.15);  color:var(--yellow); font-size:10px; padding:2px 6px; }
 
-    /* ── Calculator ── */
-    .calc-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
-    .calc-result { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:16px; margin-top:12px; }
     .result-row {
       display:flex; justify-content:space-between; align-items:center;
       padding:7px 0; border-bottom:1px solid var(--border); font-size:13px;
@@ -584,7 +581,6 @@
   <button class="tab-btn"        onclick="switchTab(this,'portfolio')">💼 포트폴리오</button>
   <button class="tab-btn"        onclick="switchTab(this,'stats')">📊 통계·그래프</button>
   <button class="tab-btn"        onclick="switchTab(this,'dividend')">💰 배당금</button>
-  <button class="tab-btn"        onclick="switchTab(this,'calculator')">🧮 계산기</button>
   <button class="tab-btn"        onclick="switchTab(this,'etfmgmt')">🔧 ETF매매</button>
   <button class="tab-btn"        onclick="switchTab(this,'etf')">🏦 ETF</button>
   <button class="tab-btn"        onclick="switchTab(this,'etfwatch')">🔍 ETF관찰</button>
@@ -1091,75 +1087,6 @@
     </div>
   </div>
 
-</div>
-
-<!-- ══════════════════════════════
-     TAB 6 : 계산기
-══════════════════════════════ -->
-<div id="tab-calculator" class="tab-content">
-  <div class="calc-grid">
-
-    <div class="card">
-      <div class="card-title">📊 평단가 계산기</div>
-      <div id="avg-rows">
-        <div class="form-grid avg-row" style="margin-bottom:8px">
-          <div class="form-group"><label>매수가 (원)</label><input type="number" class="avg-price" placeholder="0"></div>
-          <div class="form-group"><label>수량 (주)</label><input type="number" class="avg-qty" placeholder="0"></div>
-        </div>
-      </div>
-      <div class="row-flex" style="margin:10px 0">
-        <button class="btn btn-ghost btn-sm" onclick="addAvgRow()">+ 추가 매수</button>
-        <button class="btn btn-ghost btn-sm" onclick="resetAvg()">초기화</button>
-      </div>
-      <button class="btn btn-primary" style="width:100%" onclick="calcAvg()">평단가 계산</button>
-      <div class="calc-result" id="avg-result" style="display:none"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">💰 손익 계산기</div>
-      <div class="form-grid">
-        <div class="form-group"><label>매수가 (원)</label><input type="number" id="pl-buy" placeholder="0"></div>
-        <div class="form-group"><label>매도가 (원)</label><input type="number" id="pl-sell" placeholder="0"></div>
-        <div class="form-group"><label>수량 (주)</label><input type="number" id="pl-qty" placeholder="0"></div>
-        <div class="form-group"><label>수수료율 (%)</label><input type="number" id="pl-fee" placeholder="0.015" step="0.001" value="0.015"></div>
-      </div>
-      <button class="btn btn-success" style="width:100%" onclick="calcPL()">손익 계산</button>
-      <div class="calc-result" id="pl-result" style="display:none"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">🛑 손절가 계산기</div>
-      <div class="form-grid">
-        <div class="form-group"><label>기준가 (원)</label><input type="number" id="sl-price" placeholder="0"></div>
-        <div class="form-group"><label>손절 기준 (%)</label><input type="number" id="sl-pct" placeholder="예: 5" step="0.1"></div>
-        <div class="form-group"><label>수량 (선택)</label><input type="number" id="sl-qty" placeholder="0"></div>
-      </div>
-      <button class="btn btn-danger" style="width:100%" onclick="calcSL()">손절가 계산</button>
-      <div class="calc-result" id="sl-result" style="display:none"></div>
-      <hr class="divider">
-      <div class="card-title">🎯 목표가 계산기</div>
-      <div class="form-grid">
-        <div class="form-group"><label>매수가 (원)</label><input type="number" id="tp-price" placeholder="0"></div>
-        <div class="form-group"><label>목표 수익률 (%)</label><input type="number" id="tp-pct" placeholder="예: 10" step="0.1"></div>
-        <div class="form-group"><label>수량 (선택)</label><input type="number" id="tp-qty" placeholder="0"></div>
-      </div>
-      <button class="btn btn-success" style="width:100%" onclick="calcTP()">목표가 계산</button>
-      <div class="calc-result" id="tp-result" style="display:none"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">💹 배당수익률 계산기</div>
-      <div class="form-grid">
-        <div class="form-group"><label>매수가 (원)</label><input type="number" id="dy-price" placeholder="0"></div>
-        <div class="form-group"><label>연간 주당배당금 (원)</label><input type="number" id="dy-dps" placeholder="0" step="0.01"></div>
-        <div class="form-group"><label>보유 수량 (주)</label><input type="number" id="dy-qty" placeholder="0"></div>
-        <div class="form-group"><label>세율 (%)</label><input type="number" id="dy-tax" placeholder="15.4" value="15.4" step="0.1"></div>
-      </div>
-      <button class="btn btn-success" style="width:100%" onclick="calcDY()">배당수익률 계산</button>
-      <div class="calc-result" id="dy-result" style="display:none"></div>
-    </div>
-
-  </div>
 </div>
 
 <!-- ══════════════════════════════
@@ -4445,105 +4372,6 @@ function renderEtfTradeTab() {
   }
   renderEtfAllSummary();
 }
-// ══════════════════════════════════════════════════════
-// 계산기
-// ══════════════════════════════════════════════════════
-function addAvgRow() {
-  const div = document.createElement('div');
-  div.className = 'form-grid avg-row'; div.style.marginBottom = '8px';
-  div.innerHTML = `
-    <div class="form-group"><label>매수가 (원)</label><input type="number" class="avg-price" placeholder="0"></div>
-    <div class="form-group"><label>수량 (주)</label><input type="number" class="avg-qty" placeholder="0"></div>`;
-  document.getElementById('avg-rows').appendChild(div);
-}
-
-function resetAvg() {
-  document.getElementById('avg-rows').innerHTML = `
-    <div class="form-grid avg-row" style="margin-bottom:8px">
-      <div class="form-group"><label>매수가 (원)</label><input type="number" class="avg-price" placeholder="0"></div>
-      <div class="form-group"><label>수량 (주)</label><input type="number" class="avg-qty" placeholder="0"></div>
-    </div>`;
-  document.getElementById('avg-result').style.display = 'none';
-}
-
-function calcAvg() {
-  const prices = [...document.querySelectorAll('.avg-price')].map(el=>parseFloat(el.value)||0);
-  const qtys   = [...document.querySelectorAll('.avg-qty')].map(el=>parseFloat(el.value)||0);
-  let totalAmt=0, totalQty=0;
-  prices.forEach((p,i)=>{ totalAmt+=p*qtys[i]; totalQty+=qtys[i]; });
-  if (!totalQty) { toast('수량을 입력하세요.','red'); return; }
-  const avg = totalAmt/totalQty;
-  const el = document.getElementById('avg-result'); el.style.display='block';
-  el.innerHTML = `
-    <div class="result-row"><span>총 수량</span><span class="text-blue">${fmt(totalQty)}주</span></div>
-    <div class="result-row"><span>총 투자금액</span><span>${fmt(totalAmt)}원</span></div>
-    <div class="result-row"><span><strong>평균단가</strong></span><span class="text-blue result-main">${fmt(avg)}원</span></div>`;
-}
-
-function calcPL() {
-  const buy  = parseFloat(document.getElementById('pl-buy').value)  || 0;
-  const sell = parseFloat(document.getElementById('pl-sell').value) || 0;
-  const qty  = parseFloat(document.getElementById('pl-qty').value)  || 0;
-  const feeR = parseFloat(document.getElementById('pl-fee').value)  || 0;
-  if (!buy||!sell||!qty) { toast('매수가, 매도가, 수량을 입력하세요.','red'); return; }
-  const buyAmt=buy*qty, sellAmt=sell*qty, fee=(buyAmt+sellAmt)*feeR/100;
-  const pl=sellAmt-buyAmt-fee, plPct=(sell-buy)/buy*100;
-  const el=document.getElementById('pl-result'); el.style.display='block';
-  el.innerHTML=`
-    <div class="result-row"><span>매수 금액</span><span>${fmt(buyAmt)}원</span></div>
-    <div class="result-row"><span>매도 금액</span><span>${fmt(sellAmt)}원</span></div>
-    <div class="result-row"><span>수수료</span><span class="text-red">-${fmt(fee)}원</span></div>
-    <div class="result-row"><span><strong>순 손익</strong></span><span class="${cc(pl)} result-main">${sign(pl)}${fmt(pl)}원</span></div>
-    <div class="result-row"><span>수익률</span><span class="${cc(plPct)}">${sign(plPct)}${fmtF(plPct,2)}%</span></div>`;
-}
-
-function calcSL() {
-  const price=parseFloat(document.getElementById('sl-price').value)||0;
-  const pct  =parseFloat(document.getElementById('sl-pct').value)  ||0;
-  const qty  =parseFloat(document.getElementById('sl-qty').value)  ||0;
-  if (!price||!pct) { toast('기준가와 손절 기준을 입력하세요.','red'); return; }
-  const stopPrice=price*(1-pct/100), loss=qty?(stopPrice-price)*qty:null;
-  const el=document.getElementById('sl-result'); el.style.display='block';
-  el.innerHTML=`
-    <div class="result-row"><span>기준가</span><span>${fmt(price)}원</span></div>
-    <div class="result-row"><span>손절 기준</span><span class="text-blue">-${pct}%</span></div>
-    <div class="result-row"><span><strong>손절가</strong></span><span class="text-blue result-main">${fmt(stopPrice)}원</span></div>
-    ${loss!==null?`<div class="result-row"><span>예상 손실</span><span class="text-blue">${fmt(loss)}원</span></div>`:''}`;
-}
-
-function calcTP() {
-  const price=parseFloat(document.getElementById('tp-price').value)||0;
-  const pct  =parseFloat(document.getElementById('tp-pct').value)  ||0;
-  const qty  =parseFloat(document.getElementById('tp-qty').value)  ||0;
-  if (!price||!pct) { toast('매수가와 목표 수익률을 입력하세요.','red'); return; }
-  const targetPrice=price*(1+pct/100), profit=qty?(targetPrice-price)*qty:null;
-  const el=document.getElementById('tp-result'); el.style.display='block';
-  el.innerHTML=`
-    <div class="result-row"><span>매수가</span><span>${fmt(price)}원</span></div>
-    <div class="result-row"><span>목표 수익률</span><span class="text-red">+${pct}%</span></div>
-    <div class="result-row"><span><strong>목표가</strong></span><span class="text-red result-main">${fmt(targetPrice)}원</span></div>
-    ${profit!==null?`<div class="result-row"><span>예상 수익</span><span class="text-red">+${fmt(profit)}원</span></div>`:''}`;
-}
-
-function calcDY() {
-  const price=parseFloat(document.getElementById('dy-price').value)||0;
-  const dps  =parseFloat(document.getElementById('dy-dps').value)  ||0;
-  const qty  =parseFloat(document.getElementById('dy-qty').value)  ||0;
-  const tax  =parseFloat(document.getElementById('dy-tax').value)  ||15.4;
-  if (!price||!dps) { toast('매수가와 연간 주당배당금을 입력하세요.','red'); return; }
-  const yieldPct = dps / price * 100;
-  const grossAnn = qty ? dps * qty : null;
-  const netAnn   = grossAnn !== null ? grossAnn * (1 - tax/100) : null;
-  const el=document.getElementById('dy-result'); el.style.display='block';
-  el.innerHTML=`
-    <div class="result-row"><span>매수가</span><span>${fmt(price)}원</span></div>
-    <div class="result-row"><span>연간 주당배당금(DPS)</span><span class="text-yellow">${fmtF(dps,2)}원</span></div>
-    <div class="result-row"><span><strong>배당수익률</strong></span><span class="text-yellow result-main">${fmtF(yieldPct,2)}%</span></div>
-    ${grossAnn!==null?`<div class="result-row"><span>세전 연간 배당합계</span><span class="text-muted">${fmt(grossAnn)}원</span></div>`:''}
-    ${netAnn!==null?`<div class="result-row"><span>세후 연간 배당합계 (${tax}%)</span><span class="text-yellow"><strong>${fmt(netAnn)}원</strong></span></div>`:''}
-    ${netAnn!==null?`<div class="result-row"><span>세후 월 평균</span><span class="text-yellow">${fmt(netAnn/12)}원</span></div>`:''}`;
-}
-
 // ══════════════════════════════════════════════════════
 // 관심종목
 // ══════════════════════════════════════════════════════
