@@ -5093,7 +5093,10 @@ function renderWatchlist() {
     const _w2ss = wGrp === 'watch2' ? (_watch2SigsCache[(w.ticker || '').replace(/\.(KS|KQ)$/i, '')] || {}) : {};
     const _w2HasManualPeak = parseFloat(w.trendH1Price || 0) > 0;
     // 관찰1 전고점(저항선) 자동계산 — 관찰2와 동일한 서버 계산치를 별도 채널(_watch1SigsCache)로 받는다
-    const _w1ss = wGrp === 'watch1' ? (_watch1SigsCache[(w.ticker || '').replace(/\.(KS|KQ)$/i, '')] || {}) : {};
+    // 서버 signals 키는 항상 "GOOGL"처럼 대문자/공백없음(usStockMeta.json 기준) — 예전 6자리
+    // 정규식 버그가 있던 시절에 로컬 watchlist에 다른 대소문자/공백으로 저장된 티커가 남아있으면
+    // 조회가 안 맞아서 조용히 실패하므로, 양쪽 다 trim+대문자로 맞춰서 비교한다(2026-09-05).
+    const _w1ss = wGrp === 'watch1' ? (_watch1SigsCache[String(w.ticker || '').replace(/\.(KS|KQ)$/i, '').trim().toUpperCase()] || {}) : {};
     const _wAutoSs = wGrp === 'watch2' ? _w2ss : (wGrp === 'watch1' ? _w1ss : {});
     const _w2PeakPlaceholder = ((wGrp === 'watch2' || wGrp === 'watch1') && !_w2HasManualPeak && _wAutoSs.resistancePrice)
       ? `자동: ${fmt(Math.round(_wAutoSs.resistancePrice))}` : '0';
@@ -8446,9 +8449,31 @@ function startRealtimeSSE() {
           renderWatchlist();
         }
 
-        // watch1 배치(08:50/17:50) 완료 직후 서버가 능동 push → 저항선/거래량 배지 즉시 갱신
+        // watch1 배치(08:50/17:50, 또는 미국주식 수동 새로고침) 완료 직후 서버가 능동 push →
+        // 저항선/거래량 배지 즉시 갱신. 카드 메인 시세(wc-cur, w.price)는 원래 Yahoo/키움시세
+        // 버튼이 채워줬는데, 관찰1이 미국주식 전용이 되면서 그 두 버튼을 숨겼다 — 이 push가
+        // w.price를 직접 갱신해주지 않으면 배지는 새로 뜨는데 정작 메인 시세는 "—"로 영원히
+        // 멈춰있게 된다(2026-09-05 실측 확인). 그래서 여기서 watchlist의 w.price도 같이 갱신한다.
         if (data.type === 'watch1signals' && data.signals) {
+          // 진단용 로그(2026-09-05) — GOOGL/AVGO/MRVL/MU만 반복적으로 안 채워지는 원인이
+          // 서버 브로드캐스트 누락인지(확인 결과 아님 — raw SSE 페이로드에 8개 다 포함됨
+          // 확인함) 브라우저 처리 쪽 문제인지 다음 테스트에서 바로 보이게 남겨둔다.
+          console.log(`📥 watch1signals 수신: ${Object.keys(data.signals).length}개`, Object.keys(data.signals));
           localStorage.setItem('sm-watch1-signals', JSON.stringify(data.signals));
+          let priceChanged = false;
+          const matched = [], unmatched = [];
+          watchlist.forEach(w => {
+            const key = String(w.ticker || '').replace(/\.(KS|KQ)$/i, '').trim().toUpperCase();
+            const sig = data.signals[key];
+            if (sig && typeof sig.price === 'number') {
+              matched.push(key);
+              if (w.price !== sig.price) { w.price = sig.price; priceChanged = true; }
+            } else if (w.group === 'watch1' || w.group === 'watch') {
+              unmatched.push({ ticker: w.ticker, key });
+            }
+          });
+          console.log('✅ 매칭됨:', matched, unmatched.length ? '❌ 매칭 실패:' : '', unmatched.length ? unmatched : '');
+          if (priceChanged) localStorage.setItem('sm-watchlist', JSON.stringify(watchlist));
           renderWatchlist();
         }
 
