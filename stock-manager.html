@@ -1161,6 +1161,7 @@
     <span id="w-count" style="font-size:12px;color:var(--muted)"></span>
     <button id="watchlist-fetch-btn" class="btn btn-primary btn-sm no-print" onclick="fetchWatchlistPrices()">🔄 전체 시세 가져오기</button>
     <button id="watchlist-kiwoom-btn" class="btn btn-ghost btn-sm no-print" onclick="fetchWatchlistKiwoom()">🏦 키움 시세</button>
+    <button id="watchlist-us-refresh-btn" class="btn btn-primary btn-sm no-print" style="display:none" onclick="refreshUsWatch1Prices()">🇺🇸 미국주식 시세 새로고침</button>
     <button id="sse-status-btn" class="btn btn-ghost btn-sm no-print" onclick="startRealtimeSSE()" title="실시간 연결 (클릭: 재연결)">⚫ 실시간</button>
   </div>
   <div id="w-ready-acct-filter" style="display:none;margin-bottom:10px;display:none">
@@ -5013,9 +5014,15 @@ function renderWatchlist() {
 
   // 관찰2는 Yahoo(allorigins 경유) 시세 버튼을 없애고 "키움 시세"만 남긴다 — Yahoo 쪽은
   // regularMarketPrice 하나만 쓰고 배당률/애프터마켓 등 다른 필드는 애초에 안 썼어서(2026-09-05
-  // 확인) 키움으로 완전 대체 가능. 관찰1은 이번 변경 대상 아님 — 그대로 둔다.
+  // 확인) 키움으로 완전 대체 가능.
+  // 관찰1은 이제 전부 미국주식이라 이 두 버튼(Yahoo/국내전용 키움시세) 자체가 무의미 —
+  // 둘 다 숨기고 대신 서버 배치(/api/watch1/analyze)를 직접 트리거하는 버튼만 보여준다.
   const yahooFetchBtn = document.getElementById('watchlist-fetch-btn');
-  if (yahooFetchBtn) yahooFetchBtn.style.display = _watchGroup === 'watch2' ? 'none' : '';
+  const kiwoomFetchBtn = document.getElementById('watchlist-kiwoom-btn');
+  const usRefreshBtn = document.getElementById('watchlist-us-refresh-btn');
+  if (yahooFetchBtn)  yahooFetchBtn.style.display  = (_watchGroup === 'watch2' || _watchGroup === 'watch1') ? 'none' : '';
+  if (kiwoomFetchBtn) kiwoomFetchBtn.style.display = (_watchGroup === 'watch1') ? 'none' : '';
+  if (usRefreshBtn)   usRefreshBtn.style.display   = (_watchGroup === 'watch1') ? '' : 'none';
 
   // 매수대기 계좌 필터 바 표시/숨김 및 active 버튼 갱신
   const racctBar = document.getElementById('w-ready-acct-filter');
@@ -8098,6 +8105,31 @@ async function fetchWatchlistKiwoom() {
   if (btn) { btn.disabled = false; btn.textContent = '🏦 키움 시세'; }
   renderWatchlist();
   showPriceResultModal(successList, fail, true);
+}
+
+// 관찰1(미국주식) 전용 — 서버 배치(/api/watch1/analyze)를 직접 트리거한다. 이 배치는
+// fire-and-forget이라(POST가 status:'started'로 즉시 응답, 실제 8종목 처리는 백그라운드에서
+// 진행) 여기서 결과를 기다리지 않는다 — 완료되면 서버가 SSE로 watch1signals를 쏴주고,
+// 그 핸들러가 이미 localStorage 갱신 + renderWatchlist()까지 처리한다(2026-09-05 구현).
+async function refreshUsWatch1Prices() {
+  if (!kiwoomSettings.proxyUrl) { toast(KIWOOM_NO_PROXY_MSG, 'red', 15000); return; }
+
+  const btn = document.getElementById('watchlist-us-refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 요청 중...'; }
+
+  try {
+    const res = await _kiwoomFetch('/api/watch1/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify({ compareToday: false })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    toast('🇺🇸 미국주식 시세 갱신 요청됨 — 몇 초 내로 카드에 자동 반영됩니다.', 'blue');
+  } catch (e) {
+    toast(`미국주식 시세 갱신 요청 실패: ${e.message}`, 'red');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🇺🇸 미국주식 시세 새로고침'; }
+  }
 }
 
 // ══════════════════════════════════════════════════════
