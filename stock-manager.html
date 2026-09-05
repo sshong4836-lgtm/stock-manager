@@ -2455,17 +2455,25 @@ function dispTicker(ticker) {
   return (ticker || '').replace(/\.(KS|KQ|KN)$/i, '');
 }
 
+// 한국 주식 여부: .KS/.KQ/.KN 접미사, 또는 6자리 코드(한국 종목코드/ELW 등).
+// "가격>=1000이면 원화" 휴리스틱은 쓰지 않음 — 마이크론(MU) 같은 미국주식이 세 자릿수를 넘어가면
+// (2026-09-05 실측: 1016.59) 티커가 명백히 알파벳인데도 원화로 잘못 표시되는 버그였다.
+// 티커가 있으면 형식만으로 충분히 판별 가능하니 가격 크기로 통화를 추측할 필요가 없다.
+function _isKRTicker(ticker) {
+  const t = (ticker || '').toUpperCase().trim();
+  return !t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')
+      || /^[0-9]{6}$/.test(t) || /^[A-Z0-9]{6}$/.test(t);
+}
+
+// 통화 인식 가격 숫자 포맷(단위 접미사 없음): 한국 주식 → 원화 정수, 미국 주식 → 소수점 둘째자리까지
+// (정수면 그대로). 현재가/지지선/목표가/전고점 등 가격성 배지가 공유하는 단일 포맷터.
+function fmtPriceNum(price, ticker) {
+  return _isKRTicker(ticker) ? fmt(Math.round(price)) : (price % 1 === 0 ? fmt(price) : fmtF(price, 2));
+}
+
 // 통화 인식 가격 포맷: .KS/.KQ/.KN 접미사 또는 6자리 코드 → 원화, 그 외(알파벳 티커) → USD
 function fmtPrice(price, ticker) {
-  const t = (ticker || '').toUpperCase().trim();
-  // 한국 주식: .KS/.KQ/.KN 접미사, 또는 6자리 코드(한국 종목코드/ELW 등).
-  // "가격>=1000이면 원화" 휴리스틱은 제거함 — 마이크론(MU) 같은 미국주식이 세 자릿수를 넘어가면
-  // (2026-09-05 실측: 1016.59) 티커가 명백히 알파벳인데도 원화로 잘못 표시되는 버그였다.
-  // 티커가 있으면 형식만으로 충분히 판별 가능하니 가격 크기로 통화를 추측할 필요가 없다.
-  if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')
-      || /^[0-9]{6}$/.test(t) || /^[A-Z0-9]{6}$/.test(t))
-    return fmt(Math.round(price)) + '원';
-  return (price % 1 === 0 ? fmt(price) : fmtF(price, 2)) + ' USD';
+  return fmtPriceNum(price, ticker) + (_isKRTicker(ticker) ? '원' : ' USD');
 }
 
 // ══════════════════════════════════════════════════════
@@ -5510,9 +5518,9 @@ function renderWatchlist() {
               <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
             </div>
             <div class="wc-price-badges">
-              ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
-              ${_wcBadgeHtml(w.id,'stopPrice',   'wc-badge-red',  '손절',w.stopPrice,   w.price)}
-              ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
+              ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price,w.ticker)}
+              ${_wcBadgeHtml(w.id,'stopPrice',   'wc-badge-red',  '손절',w.stopPrice,   w.price,w.ticker)}
+              ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price,w.ticker)}
               ${bpsHtml}
             </div>
             <div class="wc-actions no-print" style="margin-left:auto">
@@ -5571,9 +5579,9 @@ function renderWatchlist() {
             <span class="wc-cur" data-wc-id="${w.id}">${w.price ? fmtPrice(w.price, w.ticker) : '—'}</span>
           </div>
           <div class="wc-price-badges">
-            ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price)}
-            ${wGrp === 'watch2' ? w2PeakBadge : (wGrp === 'watch1' ? peakBadge : _wcBadgeHtml(w.id,'stopPrice','wc-badge-red','손절',w.stopPrice,w.price))}
-            ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price)}
+            ${_wcBadgeHtml(w.id,'supportPrice','wc-badge-blue', '지지',w.supportPrice,w.price,w.ticker)}
+            ${wGrp === 'watch2' ? w2PeakBadge : (wGrp === 'watch1' ? peakBadge : _wcBadgeHtml(w.id,'stopPrice','wc-badge-red','손절',w.stopPrice,w.price,w.ticker))}
+            ${_wcBadgeHtml(w.id,'target',      'wc-badge-green','목표',w.target,      w.price,w.ticker)}
           </div>
           <div class="wc-actions no-print" style="margin-left:auto">
             ${w2ComboBadges}${trendBadge}${trendDistBadge}${w2SigBadges}
@@ -5891,12 +5899,12 @@ function _badgeSig(field, val, price) {
   return `<span class="wc-bsig"${color ? ` style="color:${color}"` : ''}>${text}</span>`;
 }
 
-function _badgeInner(label, val, field, price) {
-  return `<span class="wc-bl">${label}</span><span class="wc-bv">${val ? fmt(Math.round(val)) : '—'}</span>${(field && price) ? _badgeSig(field, val, price) : ''}`;
+function _badgeInner(label, val, field, price, ticker) {
+  return `<span class="wc-bl">${label}</span><span class="wc-bv">${val ? fmtPriceNum(val, ticker) : '—'}</span>${(field && price) ? _badgeSig(field, val, price) : ''}`;
 }
 
-function _wcBadgeHtml(id, field, cls, label, val, price) {
-  return `<span class="wc-badge ${val ? cls : 'wc-badge-empty'}" data-field="${field}" onclick="startWatchBadgeEdit(event,${id},'${field}')" title="${label} 클릭하여 수정">${_badgeInner(label, val, field, price)}</span>`;
+function _wcBadgeHtml(id, field, cls, label, val, price, ticker) {
+  return `<span class="wc-badge ${val ? cls : 'wc-badge-empty'}" data-field="${field}" onclick="startWatchBadgeEdit(event,${id},'${field}')" title="${label} 클릭하여 수정">${_badgeInner(label, val, field, price, ticker)}</span>`;
 }
 
 // BPS/PBR 텍스트 포맷 — 보유종목 인라인 표시와 관찰2 툴팁/상세패널이 공유하는 단일 포맷터.
@@ -5950,7 +5958,7 @@ function _buildW2PeakBadge(w, ss) {
   const title    = peak ? (isAuto ? '전고점 · 최근 20일 최고가 자동계산' : '전고점 · 수동입력값') : '전고점 데이터 없음';
   const valStyle = peak ? (isAuto ? 'color:var(--muted);font-weight:600' : 'color:var(--purple);font-weight:800') : '';
   const modeTag  = peak ? `<span style="font-size:8px;font-weight:800;margin-left:1px;${isAuto ? 'color:var(--muted)' : 'color:var(--purple)'}">${isAuto ? '🔄자동' : '📌수동'}</span>` : '';
-  return `<span class="wc-badge ${cls}" data-peak-badge="${w.id}" style="width:auto;min-width:150px;cursor:default" title="${title}"><span class="wc-bl" style="width:auto">전고점</span><span class="wc-bv" style="width:auto;${valStyle}">${peak ? fmt(Math.round(peak)) : '—'}</span>${pctHtml}${modeTag}</span>`;
+  return `<span class="wc-badge ${cls}" data-peak-badge="${w.id}" style="width:auto;min-width:150px;cursor:default" title="${title}"><span class="wc-bl" style="width:auto">전고점</span><span class="wc-bv" style="width:auto;${valStyle}">${peak ? fmtPriceNum(peak, w.ticker) : '—'}</span>${pctHtml}${modeTag}</span>`;
 }
 
 function updateWatchBadgesInPlace(id) {
@@ -5964,7 +5972,7 @@ function updateWatchBadgesInPlace(id) {
     const val = w[field] || 0;
     const el = container.querySelector(`[data-field="${field}"]`);
     if (!el) return;
-    el.innerHTML = _badgeInner(meta.label, val, field, w.price);
+    el.innerHTML = _badgeInner(meta.label, val, field, w.price, w.ticker);
     el.classList.toggle('wc-badge-empty', !val);
     el.classList.toggle(meta.cls, !!val);
   });
@@ -6000,7 +6008,7 @@ function startWatchBadgeEdit(e, id, field) {
   const meta = _BADGE_META[field];
 
   const applyVal = (val) => {
-    badge.innerHTML = _badgeInner(meta.label, val, field, w.price);
+    badge.innerHTML = _badgeInner(meta.label, val, field, w.price, w.ticker);
     badge.classList.toggle('wc-badge-empty', !val);
     badge.classList.toggle(meta.cls, !!val);
   };
