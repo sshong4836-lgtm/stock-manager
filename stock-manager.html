@@ -2455,12 +2455,15 @@ function dispTicker(ticker) {
   return (ticker || '').replace(/\.(KS|KQ|KN)$/i, '');
 }
 
-// 통화 인식 가격 포맷: .KS/.KQ/.KN, 6자리 숫자코드, 1000원 이상 정수 → 원화, 그 외 → USD
+// 통화 인식 가격 포맷: .KS/.KQ/.KN 접미사 또는 6자리 코드 → 원화, 그 외(알파벳 티커) → USD
 function fmtPrice(price, ticker) {
   const t = (ticker || '').toUpperCase().trim();
-  // 한국 주식: .KS/.KQ/.KN 접미사, 또는 6자리 숫자코드(한국 종목코드), 또는 가격>=1000(원화)
+  // 한국 주식: .KS/.KQ/.KN 접미사, 또는 6자리 코드(한국 종목코드/ELW 등).
+  // "가격>=1000이면 원화" 휴리스틱은 제거함 — 마이크론(MU) 같은 미국주식이 세 자릿수를 넘어가면
+  // (2026-09-05 실측: 1016.59) 티커가 명백히 알파벳인데도 원화로 잘못 표시되는 버그였다.
+  // 티커가 있으면 형식만으로 충분히 판별 가능하니 가격 크기로 통화를 추측할 필요가 없다.
   if (!t || t.endsWith('.KS') || t.endsWith('.KQ') || t.endsWith('.KN')
-      || /^[0-9]{6}$/.test(t) || /^[A-Z0-9]{6}$/.test(t) || price >= 1000)
+      || /^[0-9]{6}$/.test(t) || /^[A-Z0-9]{6}$/.test(t))
     return fmt(Math.round(price)) + '원';
   return (price % 1 === 0 ? fmt(price) : fmtF(price, 2)) + ' USD';
 }
