@@ -5011,6 +5011,12 @@ function renderWatchlist() {
   renderWatch2Top10();
   renderWatch2TrackerHistory();
 
+  // 관찰2는 Yahoo(allorigins 경유) 시세 버튼을 없애고 "키움 시세"만 남긴다 — Yahoo 쪽은
+  // regularMarketPrice 하나만 쓰고 배당률/애프터마켓 등 다른 필드는 애초에 안 썼어서(2026-09-05
+  // 확인) 키움으로 완전 대체 가능. 관찰1은 이번 변경 대상 아님 — 그대로 둔다.
+  const yahooFetchBtn = document.getElementById('watchlist-fetch-btn');
+  if (yahooFetchBtn) yahooFetchBtn.style.display = _watchGroup === 'watch2' ? 'none' : '';
+
   // 매수대기 계좌 필터 바 표시/숨김 및 active 버튼 갱신
   const racctBar = document.getElementById('w-ready-acct-filter');
   if (racctBar) {
