@@ -4788,11 +4788,30 @@ async function fetchSingleWatchPrice(id) {
   }
 }
 
+// allorigins.win 같은 제3자 프록시는 응답이 아예 없거나 몇 분씩 걸릴 수 있어서, 타임아웃 없는
+// await fetch()는 "조회 중..." 상태로 영원히 멈춰있을 수 있다 — AbortController로 강제 타임아웃.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchWatchlistPrices() {
-  const targets = watchlist.filter(w => w.ticker);
+  // 미국주식(GOOGL 등 알파벳 티커)은 이 버튼(Yahoo Finance 경유) 대상이 아니다 — 관찰1 배치
+  // (/api/watch1/analyze → /api/watch1/signals, 키움 실데이터로 검증됨)로만 시세를 본다.
+  // 여기서 처리하면 같은 종목에 두 개의 서로 다른 데이터소스(Yahoo vs 키움)가 섞여 혼란만 커진다.
+  const excluded = watchlist.filter(w => w.ticker && !_toKiwoomCode(w.ticker));
+  const targets = watchlist.filter(w => w.ticker && _toKiwoomCode(w.ticker));
   if (!targets.length) {
     toast('종목코드가 없습니다. 각 종목 카드에 종목코드를 입력하세요.', 'red');
     return;
+  }
+  if (excluded.length) {
+    toast(`미국주식 ${excluded.length}개는 제외됨 — 관찰1 배치 결과에서 확인하세요.`, 'yellow');
   }
 
   const btn = document.getElementById('watchlist-fetch-btn');
@@ -4803,7 +4822,7 @@ async function fetchWatchlistPrices() {
     try {
       const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(w.ticker)}?interval=1d&range=1d&_=${Date.now()}`;
       const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-      const res  = await fetch(url);
+      const res  = await fetchWithTimeout(url, {}, 10000);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       const meta = json?.chart?.result?.[0]?.meta;
@@ -7907,7 +7926,7 @@ function _guardKiwoomConfig() {
 }
 
 async function _kiwoomFetch(path, options = {}) {
-  return fetch(_kiwoomUrl(path), options);
+  return fetchWithTimeout(_kiwoomUrl(path), options, 10000);
 }
 
 // ── 토큰 발급 ──
@@ -8044,6 +8063,13 @@ async function fetchWatchlistKiwoom() {
   const targets = watchlist.filter(w => _toKiwoomCode(w.ticker));
   if (!targets.length) {
     toast('키움 종목코드(XXXXXX.KS)가 없습니다. 관심종목에 종목코드를 입력하세요.', 'red'); return;
+  }
+  // 미국주식(GOOGL 등)은 6자리 코드가 아니라 _toKiwoomCode가 이미 걸러내고 targets에서 빠진다 —
+  // 국내 전용 TR(ka10095)이라 애초에 미국주식을 조회할 수 없다(관찰1 배치/실데이터로 검증된
+  // /api/watch1/signals가 대신 그 역할을 한다). 조용히 빠지면 헷갈리니 개수만 알려준다.
+  const excludedCount = watchlist.filter(w => w.ticker && !_toKiwoomCode(w.ticker)).length;
+  if (excludedCount) {
+    toast(`미국주식 ${excludedCount}개는 제외됨 — 관찰1 배치 결과에서 확인하세요.`, 'yellow');
   }
 
   const btn = document.getElementById('watchlist-kiwoom-btn');
@@ -8571,7 +8597,12 @@ function syncWatchlistGroupsToServer() {
   const details = {};
   watchlist.forEach(w => {
     const code = String(w.ticker || '').replace(/\.(KS|KQ|KN)$/i, '').toUpperCase();
-    if (!/^[0-9]{6}$/.test(code)) return;
+    // 국내 6자리 코드 또는 미국주식 알파벳 티커(GOOGL 등, 1~5자)만 서버로 올린다 — 예전엔
+    // 6자리 숫자만 통과시켜서 미국주식이 여기서 조용히 걸러졌고, 이 함수가 서버 groups를
+    // 통째로 덮어쓰다 보니 서버가 직접 등록해둔 미국 종목까지 다음 동기화 때 지워졌었다.
+    const isDomestic = /^[0-9]{6}$/.test(code);
+    const isUsTicker = /^[A-Z]{1,5}$/.test(code);
+    if (!isDomestic && !isUsTicker) return;
     const g = Object.prototype.hasOwnProperty.call(groups, w.group) ? w.group : 'holding';
     groups[g].push(code);
     details[code] = { stopPrice: w.stopPrice || 0, target: w.target || 0, memo: w.memo || '' };
