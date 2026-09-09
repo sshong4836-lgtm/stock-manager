@@ -8796,12 +8796,18 @@ setTimeout(async () => {
     scheduleEtfServerBackup(); // 매 세션 시작 시 한 번은 서버에 현재 상태를 반영해둔다
     startRealtimeSSE();
     setTimeout(syncSubscribedCodes, 2000);
-    // watch2 신호 폴백 폴링: SSE push를 놓치거나 연결이 끊겨도 5분마다 최신 상태로 보정
-    setInterval(fetchWatch2Signals, 5 * 60 * 1000);
-    setInterval(fetchWatch2Top10, 5 * 60 * 1000);
-    setInterval(fetchWatch2TrackerHistory, 5 * 60 * 1000);
-    setInterval(fetchBpsData, 5 * 60 * 1000);
-    setInterval(fetchWatch1Signals, 5 * 60 * 1000);
+    // watch2 신호 폴백 폴링: SSE push를 놓치거나 연결이 끊겨도 5분마다 최신 상태로 보정.
+    // 5개를 그냥 setInterval로 동시에 걸면 5분마다 렌더가 한꺼번에 몰려 겹치므로,
+    // 시작 시점을 20초씩 어긋나게 줘서 이후 주기(5분)도 계속 분산되게 한다.
+    const WATCH2_POLL_PERIOD_MS = 5 * 60 * 1000;
+    function staggeredPoll(fn, offsetMs) {
+      setTimeout(() => setInterval(fn, WATCH2_POLL_PERIOD_MS), offsetMs);
+    }
+    staggeredPoll(fetchWatch2Signals, 0);
+    staggeredPoll(fetchWatch2Top10, 20 * 1000);
+    staggeredPoll(fetchWatch2TrackerHistory, 40 * 1000);
+    staggeredPoll(fetchBpsData, 60 * 1000);
+    staggeredPoll(fetchWatch1Signals, 80 * 1000);
   }
 }, 1000);
 
