@@ -2100,6 +2100,7 @@ async function restoreBackupVersion(kind, ts) {
 // 탭 전환
 // ══════════════════════════════════════════════════════
 function switchTab(btn, name) {
+  console.log('[진입확인] switchTab 호출됨', new Date().toISOString(), 'name=', name);
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -7577,6 +7578,7 @@ function switchFoDay(prev) {
 }
 
 async function loadFrgnOrgn(force) {
+  console.log('[진입확인] loadFrgnOrgn 호출됨', new Date().toISOString(), 'force=', force);
   const grid = document.getElementById('fo-grid');
   grid.innerHTML = '<div class="empty" style="grid-column:1/-1">로딩 중...</div>';
   const qs = `market=${_foMarket}${_foPrev ? '&prev=1' : ''}${force ? '&_=' + Date.now() : ''}`;
@@ -9183,6 +9185,7 @@ function _renderNewsCards() {
 }
 
 async function loadNewsTab() {
+  console.log('[진입확인] loadNewsTab 호출됨', new Date().toISOString());
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
   const qs = _newsFilter ? `&channel=${encodeURIComponent(_newsFilter)}` : '';
   const wrap = document.getElementById('news-list');
@@ -9242,6 +9245,7 @@ async function deleteNews(id) {
 }
 
 async function loadMarketCap(force = false) {
+  console.log('[진입확인] loadMarketCap 호출됨', new Date().toISOString(), '_mcLoading=', _mcLoading, 'proxyUrl=', kiwoomSettings.proxyUrl);
   if (_mcLoading) return;
   const proxyUrl = kiwoomSettings.proxyUrl;
   if (!proxyUrl) {
