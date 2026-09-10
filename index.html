@@ -1902,6 +1902,10 @@ let watchlist       = JSON.parse(localStorage.getItem('sm-watchlist')    || '[]'
 // 나오면 TDZ(Temporal Dead Zone) ReferenceError로 그 뒤 초기화 코드 전체가 멈춘다(2026-09-10
 // 실측 확인 — _priceElCache가 8403번째 줄에 있어서 발생). 반드시 이 위치(초기화 시퀀스보다 앞)에 둘 것.
 let _priceElCache = new Map();
+// TDZ 문제로 여기로 옮김 — loadEtfDividendData()가 최상단 초기화 시퀀스에서 이 선언보다 먼저
+// 호출되면 kiwoomSettings.proxyUrl 참조에서 ReferenceError(2026-09-10 실측, 원래 위치는 키움
+// REST API 섹션이었음).
+let kiwoomSettings = JSON.parse(localStorage.getItem('sm-kiwoom') || '{}');
 let watch1QualityTags = {}; // { code: {sector, roe, per, pbr, addedAt, reason} } — 관찰1 자동추가 배지용, localStorage 미저장(항상 서버 조회)
 let etfWatchlist    = JSON.parse(localStorage.getItem('sm-etfwatchlist') || '[]');
 let dividends       = JSON.parse(localStorage.getItem('sm-dividends')    || '[]');
@@ -7828,7 +7832,9 @@ async function deleteEtfScreening(id, name) {
 
 const KIWOOM_BASE = 'https://api.kiwoom.com';
 
-let kiwoomSettings = JSON.parse(localStorage.getItem('sm-kiwoom')       || '{}');
+// kiwoomSettings 선언은 TDZ 문제로 1899번째 줄 근처(전역 상태 선언부)로 옮김 — loadEtfDividendData()가
+// 최상단 초기화 시퀀스(7110번째 줄 근처)에서 이보다 먼저 호출돼 여기 있으면 ReferenceError가 난다
+// (2026-09-10 실측 확인, try/catch로 감싸져 있어 "ETF 배당수익률 로드 실패"로만 조용히 실패했음).
 let kiwoomToken    = JSON.parse(localStorage.getItem('sm-kiwoom-token') || '{}');
 
 function loadKiwoomSettingsUI() {
