@@ -4886,7 +4886,7 @@ function renderWatch2Top10() {
                 : `<span style="font-size:10px;color:var(--muted)">오늘 신호 없음</span>`}
             </div>
             <div style="font-size:11px;color:var(--muted)">
-              최근7일 avgα: <b style="color:${r.avgAlpha > 0 ? 'var(--green)' : r.avgAlpha < 0 ? 'var(--red)' : 'var(--muted)'}">${(r.avgAlpha||0).toFixed(2)}</b>
+              추적수익률: <b style="color:${r.avgAlpha == null ? 'var(--muted)' : r.avgAlpha > 0 ? 'var(--green)' : r.avgAlpha < 0 ? 'var(--red)' : 'var(--muted)'}">${r.avgAlpha == null ? '신규' : r.avgAlpha.toFixed(2)}</b>
               · score ${(r.score||0).toFixed(1)}${r.comboBonus ? ` <b style="color:var(--green)">(조합 +${r.comboBonus})</b>` : ''}
             </div>
           </div>`).join('')}
