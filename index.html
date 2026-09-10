@@ -5625,7 +5625,7 @@ function toggleWatchDetail(id) {
   if (opening) {
     const w = watchlist.find(x => x.id === id);
     if (w) {
-      ['supportPrice', 'stopPrice', 'target'].forEach(field => {
+      ['supportPrice', 'stopPrice', 'target', 'horizPrice'].forEach(field => {
         const inp = panel.querySelector(`input[onchange*="'${field}'"]`);
         if (inp) inp.value = w[field] || '';
       });
@@ -8679,7 +8679,7 @@ function syncWatchlistGroupsToServer() {
     if (!isDomestic && !isUsTicker) return;
     const g = Object.prototype.hasOwnProperty.call(groups, w.group) ? w.group : 'holding';
     groups[g].push(code);
-    details[code] = { stopPrice: w.stopPrice || 0, target: w.target || 0, memo: w.memo || '' };
+    details[code] = { stopPrice: w.stopPrice || 0, target: w.target || 0, memo: w.memo || '', supportPrice: w.supportPrice || 0, horizPrice: w.horizPrice || 0 };
   });
 
   fetch(`${proxyUrl}/watchlist`, {
@@ -8715,7 +8715,9 @@ async function restoreWatchlistFromServer() {
           group: g,
           stopPrice: d.stopPrice || 0,
           target: d.target || 0,
-          memo: d.memo || ''
+          memo: d.memo || '',
+          supportPrice: d.supportPrice || 0,
+          horizPrice: d.horizPrice || 0
         });
       });
     });
