@@ -1908,6 +1908,37 @@ let _priceElCache = new Map();
 // 곧바로 참조될 수 있어 _priceElCache와 같은 자리에 둔다(TDZ 회피).
 let _watchDetailOpenIds = new Set(); // 현재 열려있는 상세설정 패널들의 watchlist id (여러 개 동시에 열 수 있음)
 let _watchlistRenderPending = false; // 패널이 열려있어 renderWatchlist()를 건너뛴 적이 있는지
+
+// renderWatchlist() 실측용 카운터(2026-09-10) — 이 선언을 원래 8480번째 줄 부근(SSE 섹션)에
+// 뒀었는데, renderWatchlist()의 최초 동기 호출(7149번째 줄)이 그보다 훨씬 앞이라 매 페이지
+// 로드마다 `window._renderStats.calls++`에서 "Cannot read properties of undefined (reading
+// 'calls')"로 터졌다 — _priceElCache와 완전히 같은 유형의 TDZ류 버그. 이 throw가 잡히는 곳
+// 없이 최상단 스크립트를 그 지점에서 통째로 멈춰 세워서, 그 뒤에 나오는 모든 top-level
+// let/const(관찰1 _foMarket·시총순위 _mcLoading·종목뉴스 _newsFilter 등)가 선언 자체가
+// 실행되지 않아 영영 TDZ에 갇히는 연쇄 장애였다(2026-09-10 실측 확인 — 종목뉴스/외인기관/
+// 시총순위 탭이 전부 이것 때문에 죽어 있었음). 그래서 이 카운터 선언도 여기로 옮긴다.
+window._renderStats = { calls: 0, totalMs: 0, maxMs: 0, callers: {} };
+window.printRenderStats = () => {
+  console.log(`renderWatchlist 호출 ${window._renderStats.calls}회, 평균 ${(window._renderStats.totalMs / (window._renderStats.calls || 1)).toFixed(1)}ms, 최대 ${window._renderStats.maxMs.toFixed(1)}ms`);
+  console.table(window._renderStats.callers);
+};
+// SSE 실측용 카운터 — 콘솔에서 window.printSSEStats()로 조회. applyPriceUpdate()는 페이지
+// 로드 시 동기 호출되진 않지만(SSE 틱 수신 시에만 실행) 같은 안전지대에 모아둔다.
+window._sseDebugStats = { ticks: 0, domWrites: 0, skippedHidden: 0, skippedUnchanged: 0 };
+window.printSSEStats = () => console.table(window._sseDebugStats);
+// 로그 상세도 토글 — 기본은 개수만 찍고, 콘솔에서 window.DEBUG_VERBOSE_LOGS = true로 바꾸면
+// 새로고침 없이 다음 로그부터 바로 전체 목록까지 찍힌다(매번 호출 시점에 값을 읽으므로).
+window.DEBUG_VERBOSE_LOGS = false;
+
+// 아래 세 변수도 원래 위치(관찰1/시총순위/종목뉴스 섹션, 7000~9000번째 줄대)가 renderWatchlist()의
+// 최초 동기 호출(7149번째 줄)보다 뒤라 위 _renderStats와 똑같은 방식으로 TDZ에 걸려 있었다.
+// 근본 원인(_renderStats 위치)은 고쳤지만, 앞으로 그 사이에 또 다른 동기 실행 중 예외가 생겨도
+// 이 셋만은 영향을 안 받도록 _priceElCache와 같은 안전지대로 옮겨 이중으로 방어해둔다.
+let _foMarket = 'kospi';       // 외인·기관 탭: 코스피/코스닥
+let _foPrev   = false;         // 외인·기관 탭: 조회일자 전일 여부
+let _mcCurrentTab = 'kospi';   // 시총순위 탭: 코스피/코스닥
+let _mcLoading = false;        // 시총순위 탭: 중복 로드 방지
+let _newsFilter = '';          // 종목뉴스 탭: 채널 필터
 // TDZ 문제로 여기로 옮김 — loadEtfDividendData()가 최상단 초기화 시퀀스에서 이 선언보다 먼저
 // 호출되면 kiwoomSettings.proxyUrl 참조에서 ReferenceError(2026-09-10 실측, 원래 위치는 키움
 // REST API 섹션이었음).
@@ -2100,7 +2131,6 @@ async function restoreBackupVersion(kind, ts) {
 // 탭 전환
 // ══════════════════════════════════════════════════════
 function switchTab(btn, name) {
-  console.log('[진입확인] switchTab 호출됨', new Date().toISOString(), 'name=', name);
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -7552,9 +7582,6 @@ async function fetchAllEtfWatchPrices() {
 // 서버가 원시값을 억원·주 단위로 환산해서 내려준다 (환산 계수는 서버 주석 참고).
 // ══════════════════════════════════════════════════════
 
-let _foMarket = 'kospi';
-let _foPrev   = false;   // true면 조회일자 전일
-
 // 표시 순서: 순매수 2개를 먼저, 순매도 2개를 뒤에
 const FO_COLUMNS = [
   { key: 'foreignBuy',  cls: 'fo-buy',  icon: '🌏' },
@@ -7578,7 +7605,6 @@ function switchFoDay(prev) {
 }
 
 async function loadFrgnOrgn(force) {
-  console.log('[진입확인] loadFrgnOrgn 호출됨', new Date().toISOString(), 'force=', force);
   const grid = document.getElementById('fo-grid');
   grid.innerHTML = '<div class="empty" style="grid-column:1/-1">로딩 중...</div>';
   const qs = `market=${_foMarket}${_foPrev ? '&prev=1' : ''}${force ? '&_=' + Date.now() : ''}`;
@@ -8467,22 +8493,6 @@ function rebuildPriceElCache() {
   });
 }
 
-// 임시 실측용 카운터(2026-09-10, SSE 최적화 효과 확인용) — 콘솔에서 window.printSSEStats()로 조회.
-window._sseDebugStats = { ticks: 0, domWrites: 0, skippedHidden: 0, skippedUnchanged: 0 };
-window.printSSEStats = () => console.table(window._sseDebugStats);
-
-// 로그 상세도 토글(2026-09-10) — 기본은 개수만 찍고, 콘솔에서 window.DEBUG_VERBOSE_LOGS = true로
-// 바꾸면 새로고침 없이 다음 로그부터 바로 전체 목록까지 찍힌다(매번 호출 시점에 값을 읽으므로).
-window.DEBUG_VERBOSE_LOGS = false;
-
-// renderWatchlist() 호출 빈도 실측용 카운터(2026-09-10) — 87종목 전체 DOM을 다시 그리는 무거운
-// 함수라 얼마나 자주 도는지가 버벅임 원인 후보. 콘솔에서 window.printRenderStats()로 조회.
-window._renderStats = { calls: 0, totalMs: 0, maxMs: 0, callers: {} };
-window.printRenderStats = () => {
-  console.log(`renderWatchlist 호출 ${window._renderStats.calls}회, 평균 ${(window._renderStats.totalMs / (window._renderStats.calls || 1)).toFixed(1)}ms, 최대 ${window._renderStats.maxMs.toFixed(1)}ms`);
-  console.table(window._renderStats.callers);
-};
-
 let _sseSource = null;
 let _sseRetryCount = 0;
 let _sseConnected = false;
@@ -8916,9 +8926,6 @@ setTimeout(loadHomeTab, 500);
 // ══════════════════════════════════════════════════════
 // 시총순위 탭
 // ══════════════════════════════════════════════════════
-let _mcCurrentTab = 'kospi';
-let _mcLoading = false;
-
 function switchMcTab(tab) {
   _mcCurrentTab = tab;
   document.getElementById('mc-btn-kospi').classList.toggle('active', tab === 'kospi');
@@ -8995,7 +9002,6 @@ const NEWS_CHANNELS = [
 ];
 const NEWS_SHORT_LEN = 50; // 이 글자수 미만이면 한 줄로 접어서 표시
 
-let _newsFilter = '';
 let _newsStockFilter = '';
 let _newsWatchOnly = false;
 let _newsExpandedIds = new Set();
@@ -9185,7 +9191,6 @@ function _renderNewsCards() {
 }
 
 async function loadNewsTab() {
-  console.log('[진입확인] loadNewsTab 호출됨', new Date().toISOString());
   const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
   const qs = _newsFilter ? `&channel=${encodeURIComponent(_newsFilter)}` : '';
   const wrap = document.getElementById('news-list');
@@ -9245,7 +9250,6 @@ async function deleteNews(id) {
 }
 
 async function loadMarketCap(force = false) {
-  console.log('[진입확인] loadMarketCap 호출됨', new Date().toISOString(), '_mcLoading=', _mcLoading, 'proxyUrl=', kiwoomSettings.proxyUrl);
   if (_mcLoading) return;
   const proxyUrl = kiwoomSettings.proxyUrl;
   if (!proxyUrl) {
