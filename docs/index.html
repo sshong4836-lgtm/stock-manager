@@ -4479,13 +4479,22 @@ function setWatchReadyAccountFilter(acct) {
 }
 
 // 자동연동+수동 포트폴리오 종목 중 watchlist holding 항목이 없으면 자동 생성 (분석설정 유지용)
+// ticker는 포트폴리오 탭에서 이미 입력해둔 종목코드 매핑(etfTickerMap)을 그대로 재사용한다 —
+// 매핑에 없으면 기존과 동일하게 빈 값으로 남는다(시세조회·알림동기화는 안 되지만 최소한 화면엔 뜸).
+// 기존에 ticker 없이 생성됐던 holding 항목도 매핑이 채워지면 다음 렌더에서 소급 채움(2026-09-12).
 function syncHoldingWatchlistWithPortfolio(allRows) {
   const norm = g => (g === 'watch') ? 'watch1' : (g || 'watch1');
   let changed = false;
   allRows.forEach(r => {
     const exists = watchlist.some(w => norm(w.group) === 'holding' && w.stock === r.stock);
     if (!exists) {
-      watchlist.push({ id: Date.now() + Math.floor(Math.random() * 9999), stock: r.stock, ticker: '', group: 'holding' });
+      watchlist.push({ id: Date.now() + Math.floor(Math.random() * 9999), stock: r.stock, ticker: etfTickerMap[r.stock] || '', group: 'holding' });
+      changed = true;
+    }
+  });
+  watchlist.forEach(w => {
+    if (norm(w.group) === 'holding' && !w.ticker && etfTickerMap[w.stock]) {
+      w.ticker = etfTickerMap[w.stock];
       changed = true;
     }
   });
