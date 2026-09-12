@@ -4498,6 +4498,20 @@ function syncHoldingWatchlistWithPortfolio(allRows) {
       changed = true;
     }
   });
+  // 전량매도 등으로 실보유수량이 0이 된 holding 항목 정리(2026-09-12) — 태그만 남으면 보유종목
+  // 탭엔 안 보이면서(포트폴리오 매치 실패) watch2 TOP10 랭킹후보 제외 필터(computeWatch2Top10)에는
+  // 계속 걸려 재진입 후보 발굴이 영구히 막히는 문제가 있었다(SKC·삼성SDI·드림텍 실사례).
+  // details(지지/손절/목표)는 종목코드 기준 별도 저장이라 아래 처리로 값이 사라지지 않는다.
+  const realStocks = new Set(allRows.map(r => r.stock));
+  watchlist = watchlist.filter(w => {
+    if (norm(w.group) !== 'holding' || realStocks.has(w.stock)) return true;
+    const dupElsewhere = watchlist.some(o => o !== w && norm(o.group) !== 'holding' &&
+      ((w.ticker && o.ticker === w.ticker) || (!w.ticker && o.stock === w.stock)));
+    changed = true;
+    if (dupElsewhere) return false;           // 다른 그룹에 이미 있으면 holding 항목만 제거
+    w.group = 'watch2';                       // 어디에도 없으면 삭제 대신 관찰2로 이동(재진입 관찰 유지)
+    return true;
+  });
   if (changed) save('watchlist', watchlist);
 }
 
@@ -8782,6 +8796,17 @@ function syncWatchlistGroupsToServer() {
   const proxyUrl = kiwoomSettings.proxyUrl;
   if (!proxyUrl) return;
 
+  // 서버로 올리는 holding 배열은 group==='holding' 태그만 보지 않고 그 시점의 실보유수량(qty>0)과
+  // 교집합을 취한다(2026-09-12) — syncHoldingWatchlistWithPortfolio의 정리는 보유종목 탭을 열어야
+  // 실행되므로, 그 전 사이(다른 탭에서 편집→save 호출) watch2 TOP10 랭킹후보 제외 필터가 이미
+  // 청산된 종목까지 계속 막지 않도록 하는 이중 안전장치.
+  const _journalH = calcHoldingsFromJournal();
+  const _autoStocks = new Set(Object.entries(_journalH).filter(([, h]) => h.qty > 0.0001).map(([s]) => s));
+  const realHoldingStocks = new Set([
+    ...Object.entries(_journalH).filter(([, h]) => h.qty > 0.0001).map(([s]) => s),
+    ...portfolioManual.filter(p => !_autoStocks.has(p.stock) && p.qty > 0.0001).map(p => p.stock)
+  ]);
+
   const groups = { holding: [], watch1: [], watch2: [], ready: [] };
   // 종목코드별 손절가/목표가/메모 — 그룹 소속과 별개로 코드 기준 저장해 백업/복원 대상에 포함시킨다
   const details = {};
@@ -8793,9 +8818,12 @@ function syncWatchlistGroupsToServer() {
     const isDomestic = /^[0-9]{6}$/.test(code);
     const isUsTicker = /^[A-Z]{1,5}$/.test(code);
     if (!isDomestic && !isUsTicker) return;
-    const g = Object.prototype.hasOwnProperty.call(groups, w.group) ? w.group : 'holding';
-    groups[g].push(code);
+    // details는 그룹 판정과 무관하게 항상 먼저 기록 — 아래에서 holding 제외로 skip 되어도
+    // 서버 details 전체교체(app.post('/watchlist'))에서 값이 유실되지 않게 한다.
     details[code] = { stopPrice: w.stopPrice || 0, target: w.target || 0, memo: w.memo || '', supportPrice: w.supportPrice || 0, horizPrice: w.horizPrice || 0 };
+    const g = Object.prototype.hasOwnProperty.call(groups, w.group) ? w.group : 'holding';
+    if (g === 'holding' && !realHoldingStocks.has(w.stock)) return;  // 실보유 아니면 서버 holding 목록엔 안 올림
+    groups[g].push(code);
   });
 
   fetch(`${proxyUrl}/watchlist`, {
