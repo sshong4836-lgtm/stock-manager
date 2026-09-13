@@ -9184,6 +9184,14 @@ function _renderNewsCards() {
     const isDocOnly = !!n.doc_name && /^문서\s*첨부(:|$)/.test((n.text || '').trim());
     const rawLen = (n.text || '').trim().length;
     const isShort = !isDocOnly && !isImgAttach && rawLen > 0 && rawLen < NEWS_SHORT_LEN;
+    // 문서명은 없지만 이미지 등 첨부가 있는 경우(예: 캡션 있는 리포트 그림) — 텔레그램 원문 링크라도 노출
+    const attachHtml = (n.doc_name || n.has_media)
+      ? `<div class="news-doc">${
+          tgUrl
+            ? `<a href="${tgUrl}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">${n.doc_name ? `📄 ${n.doc_name}` : '🖼️ 첨부 이미지 — 텔레그램에서 보기'}</a>`
+            : (n.doc_name ? `📄 ${n.doc_name}` : '🖼️ 첨부 이미지 (원문 링크 없음)')
+        }</div>`
+      : '';
     let bodyHtml, docHtml;
     if (isDocOnly) {
       const expanded = _newsExpandedIds.has(n.id);
@@ -9202,14 +9210,10 @@ function _renderNewsCards() {
         : `<div class="news-body-collapsed-wrap" onclick='toggleNewsExpand(event,${JSON.stringify(n.id)})'>
              <span class="news-body-collapsed-text">${body}</span><span class="news-doc-toggle">▼ 펼치기</span>
            </div>`;
-      docHtml = n.doc_name
-        ? `<div class="news-doc">${tgUrl ? `<a href="${tgUrl}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">📄 ${n.doc_name}</a>` : `📄 ${n.doc_name}`}</div>`
-        : '';
+      docHtml = attachHtml;
     } else {
       bodyHtml = `<div class="news-body">${body}${isImgAttach ? tgLink : ''}</div>`;
-      docHtml = n.doc_name
-        ? `<div class="news-doc">${tgUrl ? `<a href="${tgUrl}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none">📄 ${n.doc_name}</a>` : `📄 ${n.doc_name}`}</div>`
-        : '';
+      docHtml = attachHtml;
     }
     const apiTags = Array.isArray(n.tags) ? n.tags : [];
     const apiTagsHtml = apiTags.length ? `<div class="news-tags">${apiTags.map(tg => `<span class="news-api-tag">${tg}</span>`).join('')}</div>` : '';
