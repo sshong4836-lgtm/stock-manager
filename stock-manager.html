@@ -1047,6 +1047,7 @@
       <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s2')">📊 삼성ETF2</button>
     </div>
     <button id="etf-div-update-btn" class="btn btn-success btn-sm no-print" onclick="updateEtfDividendsAll()">🔄 배당수익률 자동업데이트</button>
+    <span id="etf-div-lastupdated" style="font-size:11px;color:var(--muted)"></span>
   </div>
 
   <!-- 일별 스냅샷 히스토리 (전체 합산) -->
@@ -4682,12 +4683,25 @@ function updateW2AlertBadge(watchId) {
 // ── 종목코드로 키움 API(ka10001) 조회 → 종목명 자동 입력 ──
 const KIWOOM_NGROK = 'https://stock-manager-hong.ngrok.app';
 
+// ── ETF 배당수익률 데이터 기준일 표시 (가장 최근 updatedAt) ──
+function renderEtfDivLastUpdated() {
+  const el = document.getElementById('etf-div-lastupdated');
+  if (!el) return;
+  const dates = Object.values(etfDividendData).map(v => v?.updatedAt).filter(Boolean).sort();
+  if (!dates.length) { el.textContent = ''; return; }
+  const latest = dates[dates.length - 1];
+  const days = Math.floor((Date.now() - new Date(latest + 'T00:00:00+09:00').getTime()) / 86400000);
+  const staleMark = days >= 7 ? ' ⚠️' : '';
+  el.textContent = `데이터 기준: ${latest} (${days}일 전)${staleMark}`;
+}
+
 // ── ETF 배당수익률 자동 로드 ──
 async function loadEtfDividendData() {
   try {
     const base = (kiwoomSettings.proxyUrl || KIWOOM_NGROK).replace(/\/$/, '');
     const res = await fetch(`${base}/api/etf-dividend`);
     if (res.ok) etfDividendData = await res.json();
+    renderEtfDivLastUpdated();
   } catch(e) {
     console.warn('ETF 배당수익률 로드 실패:', e.message);
   }
@@ -4720,6 +4734,7 @@ async function updateEtfDividends(acctId) {
     const data = await res.json();
     etfDividendData = await (await fetch(`${base}/api/etf-dividend`)).json();
     renderEtfAcctTab(acctId);
+    renderEtfDivLastUpdated();
     const cnt = Object.keys(data.results || {}).length;
     toast(`배당수익률 자동 업데이트 완료 (${cnt}/${codes.length}개)`, 'green');
   } catch(e) {
