@@ -1040,11 +1040,12 @@
 <div id="tab-etf" class="tab-content">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:4px">
     <div class="sub-tabs" style="margin-bottom:0">
-      <button class="sub-tab-btn active" onclick="switchEtfSubTab(this,'nh1')">🏦 NH연금1</button>
-      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh2')">🏦 NH연금2</button>
-      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh3')">🏦 NH연금3</button>
-      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s1')">📊 삼성ETF1</button>
-      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s2')">📊 삼성ETF2</button>
+      <button class="sub-tab-btn active" onclick="switchEtfSubTab(this,'nh1')">🏦 NH연금2</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh2')">🏦 NH연금3</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'nh3')">🏦 NH연금4</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'isa1')">📊 ISA1</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s2')">📊 ISA2</button>
+      <button class="sub-tab-btn" onclick="switchEtfSubTab(this,'s1')">📊 삼성ETF</button>
     </div>
     <button id="etf-div-update-btn" class="btn btn-success btn-sm no-print" onclick="updateEtfDividendsAll()">🔄 배당수익률 자동업데이트</button>
     <span id="etf-div-lastupdated" style="font-size:11px;color:var(--muted)"></span>
@@ -1056,11 +1057,12 @@
     <div id="etf-daily-history"><div class="empty" style="padding:16px">ETF 탭을 열면 표시됩니다.</div></div>
   </div>
 
-  <div id="sub-etf-nh1" class="sub-tab-content active"></div>
-  <div id="sub-etf-nh2" class="sub-tab-content"></div>
-  <div id="sub-etf-nh3" class="sub-tab-content"></div>
-  <div id="sub-etf-s1"  class="sub-tab-content"></div>
-  <div id="sub-etf-s2"  class="sub-tab-content"></div>
+  <div id="sub-etf-nh1"  class="sub-tab-content active"></div>
+  <div id="sub-etf-nh2"  class="sub-tab-content"></div>
+  <div id="sub-etf-nh3"  class="sub-tab-content"></div>
+  <div id="sub-etf-isa1" class="sub-tab-content"></div>
+  <div id="sub-etf-s2"   class="sub-tab-content"></div>
+  <div id="sub-etf-s1"   class="sub-tab-content"></div>
 </div>
 
 <!-- ══════════════════════════════
@@ -1074,11 +1076,12 @@
     <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
       <div class="form-group"><label>계좌</label>
         <select id="etfm-acct">
-          <option value="nh1">NH연금1</option>
-          <option value="nh2">NH연금2</option>
-          <option value="nh3">NH연금3</option>
-          <option value="s1">삼성ETF1</option>
-          <option value="s2">삼성ETF2</option>
+          <option value="nh1">NH연금2</option>
+          <option value="nh2">NH연금3</option>
+          <option value="nh3">NH연금4</option>
+          <option value="isa1">ISA1</option>
+          <option value="s2">ISA2</option>
+          <option value="s1">삼성ETF</option>
         </select>
       </div>
       <div class="form-group"><label>날짜</label><input type="date" id="etfm-date"></div>
@@ -1881,17 +1884,36 @@ let futuresData     = []; // 서버 DB(/api/futures)에서 비동기 로드 (ren
 
 // ── ETF 계좌별 통합 관리 ──
 const ETF_ACCOUNTS = [
-  { id:'nh1', label:'NH연금1', jKey:'sm-etf-journals',  dKey:'sm-etf-div'    },
-  { id:'nh2', label:'NH연금2', jKey:'sm-etf-j-nh2',     dKey:'sm-etf-d-nh2'  },
-  { id:'nh3', label:'NH연금3', jKey:'sm-etf-j-nh3',     dKey:'sm-etf-d-nh3'  },
-  { id:'s1',  label:'삼성ETF1',jKey:'sm-etf-j-s1',      dKey:'sm-etf-d-s1'   },
-  { id:'s2',  label:'삼성ETF2',jKey:'sm-etf-j-s2',      dKey:'sm-etf-d-s2'   },
+  { id:'nh1',  label:'NH연금2', jKey:'sm-etf-journals',  dKey:'sm-etf-div'    },
+  { id:'nh2',  label:'NH연금3', jKey:'sm-etf-j-nh2',     dKey:'sm-etf-d-nh2'  },
+  { id:'nh3',  label:'NH연금4', jKey:'sm-etf-j-nh3',     dKey:'sm-etf-d-nh3'  },
+  { id:'isa1', label:'ISA1',   jKey:'sm-etf-j-isa1',    dKey:'sm-etf-d-isa1' },
+  { id:'s2',   label:'ISA2',   jKey:'sm-etf-j-s2',      dKey:'sm-etf-d-s2'   },
+  { id:'s1',   label:'삼성ETF',jKey:'sm-etf-j-s1',      dKey:'sm-etf-d-s1'   },
 ];
 const etfAcctJ = {}, etfAcctD = {};
 ETF_ACCOUNTS.forEach(a => {
   etfAcctJ[a.id] = JSON.parse(localStorage.getItem(a.jKey) || '[]');
   etfAcctD[a.id] = JSON.parse(localStorage.getItem(a.dKey) || '{}');
 });
+// ── ISA1 신규 계좌 초기 매수 기록 시딩 (2026-09-21, 최초 1회만 — localStorage에 키가
+//    없을 때만 실행되므로 이후 사용자가 기록을 지워도 재시딩되지 않는다) ──
+if (localStorage.getItem('sm-etf-j-isa1') === null) {
+  const _isa1Seed = [
+    ['KODEX 200커버드콜액티브',                    1000, 8321],
+    ['TIGER 미국나스닥100타겟데일리커버드콜',       1000, 10625],
+    ['KODEX 미국배당커버드콜액티브',                 700, 12451],
+    ['KoAct 고배당액티브',                            500, 10384],
+    ['KODEX 미국나스닥100데일리커버드콜OTM',          400, 9140],
+    ['KODEX 미국성장커버드콜액티브',                  350, 9425],
+    ['RISE 미국AI밸류체인데일리고정커버드콜',          350, 14456],
+    ['TIGER 배당커버드콜액티브',                       300, 19815],
+  ];
+  const _isa1SeedDate = new Date().toISOString().slice(0, 10);
+  etfAcctJ.isa1 = _isa1Seed.map(([stock, qty, price], i) =>
+    ({ id: Date.now() + i, date: _isa1SeedDate, stock, type: 'buy', qty, price, fee: 0 }));
+  saveEtfJ('isa1');
+}
 let portfolioMeta   = JSON.parse(localStorage.getItem('sm-pmeta')        || '{}');
 let portfolioManual = JSON.parse(localStorage.getItem('sm-pmanual')      || '[]');
 let portfolioAccountFilter = 'all'; // 포트폴리오 계좌 필터: 'all' | '삼성' | '키움' | 'NH'
@@ -2556,7 +2578,7 @@ function calcHoldingsFromJournal(acctFilter) {
   return h;
 }
 
-// ETF 보유 계산 (NH연금1 = 기존 호환용)
+// ETF 보유 계산 (id 'nh1' = 기존 호환용, 2026-09-21부터 표시 라벨은 "NH연금2")
 function calcEtfHoldings() { return calcEtfH('nh1'); }
 
 // ══════════════════════════════════════════════════════
@@ -3939,7 +3961,7 @@ function toggleEtfJournalFor(acctId) {
   btn.textContent    = open ? '▲ ETF 매매내역 숨기기' : '▼ ETF 매매내역 보기';
 }
 
-// ── 계좌 탭 렌더링 (5개 모두 동일 함수) ──
+// ── 계좌 탭 렌더링 (모든 계좌 동일 함수) ──
 function renderEtfAcctTab(acctId) {
   const divS     = etfAcctD[acctId];
   const TAX_RATE = 0.154;
