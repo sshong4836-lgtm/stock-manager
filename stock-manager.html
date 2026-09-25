@@ -1176,8 +1176,8 @@
     <button class="btn btn-sm w-racct-btn"        data-acct="NH"    onclick="setWatchReadyAccountFilter('NH')">🟢 NH</button>
   </div>
   <div id="w2-top10-section" style="display:none;margin-bottom:14px"></div>
-  <div id="w2-tracker-section" style="display:none;margin-bottom:14px"></div>
   <div class="wc-list" id="w-grid"></div>
+  <div id="w2-tracker-section" style="display:none;margin-top:14px"></div>
 </div>
 
 <!-- ══════════════════════════════
@@ -4961,6 +4961,37 @@ async function fetchWatchlistPrices() {
 function escAttr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
+// TOP10 카드의 "추적수익률" 줄 — entryInfo(server.js getWatch2TrackerEntryInfo)를 사용해
+// 진입일/진입가를 같이 보여준다. avgAlpha가 null인 두 경우를 구분: entryInfo가 아예 없으면
+// 진짜 신규, entryInfo.kind==='stale'이면 레코드는 있으나 오래돼 점수엔 반영 안 된 경우(회색).
+function _fmtW2TrackerMD(dateStr) {
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(dateStr || '');
+  return m ? `${parseInt(m[1], 10)}/${parseInt(m[2], 10)}` : (dateStr || '?');
+}
+function _renderW2TrackerLine(r) {
+  const ei = r.entryInfo;
+  const won = (p) => (typeof p === 'number') ? `${Math.round(p).toLocaleString()}원` : '?';
+
+  if (!ei) {
+    return `추적수익률: <b style="color:var(--muted)">신규</b>`;
+  }
+  if (ei.kind === 'stale') {
+    return `추적수익률: <b style="color:var(--muted)">${ei.returnPct.toFixed(2)}</b> ` +
+      `<span style="color:var(--muted);opacity:.6">(${_fmtW2TrackerMD(ei.entryDate)} → ${_fmtW2TrackerMD(ei.statusChangedAt)} 추적종료)</span>`;
+  }
+  const alphaColor = r.avgAlpha == null ? 'var(--muted)' : r.avgAlpha > 0 ? 'var(--green)' : r.avgAlpha < 0 ? 'var(--red)' : 'var(--muted)';
+  const range = `${_fmtW2TrackerMD(ei.entryDate)} ${won(ei.entryPrice)} → ${won(ei.currentPrice)}`;
+  let rangeHtml;
+  if (ei.status === '만료') {
+    rangeHtml = `<span style="color:var(--muted);opacity:.6">(${range} · 만료)</span>`;
+  } else if (ei.status === '승격') {
+    rangeHtml = `<span style="color:var(--green)">(${range} · 승격→${ei.promotedTo === 'holding' ? '보유' : '매수대기'})</span>`;
+  } else {
+    rangeHtml = `<span>(${range})</span>`;
+  }
+  return `추적수익률: <b style="color:${alphaColor}">${r.avgAlpha == null ? '신규' : r.avgAlpha.toFixed(2)}</b> ${rangeHtml}`;
+}
+
 // 관찰2 전용 "오늘의 핵심관찰 TOP10" 카드 — 48종목 풀리스트는 그대로 두고 요약만 상단에 강조 표시
 function renderWatch2Top10() {
   const section = document.getElementById('w2-top10-section');
@@ -4990,7 +5021,7 @@ function renderWatch2Top10() {
                 : `<span style="font-size:10px;color:var(--muted)">오늘 신호 없음</span>`}
             </div>
             <div style="font-size:11px;color:var(--muted)">
-              추적수익률: <b style="color:${r.avgAlpha == null ? 'var(--muted)' : r.avgAlpha > 0 ? 'var(--green)' : r.avgAlpha < 0 ? 'var(--red)' : 'var(--muted)'}">${r.avgAlpha == null ? '신규' : r.avgAlpha.toFixed(2)}</b>
+              ${_renderW2TrackerLine(r)}
               · score ${(r.score||0).toFixed(1)}${r.comboBonus ? ` <b style="color:var(--green)">(조합 +${r.comboBonus})</b>` : ''}
             </div>
           </div>`).join('')}
@@ -5001,9 +5032,15 @@ function renderWatch2Top10() {
 // 관찰2 정식 신호 정렬 우선순위 — 정배열/저항선돌파처럼 상태지속형 신호를 앞쪽에 노출 (server.js WATCH2_SIGNAL_SORT_ORDER와 동일)
 const W2_TRACKER_SIGNAL_ORDER = ['정배열', '저항선돌파', '골든크로스', 'RSI과매도진입', 'RSI과매도탈출', '장대양봉', '망치형', '양봉전환', '도지캔들', '거래량급증'];
 let _watch2TrackerShowAll = false; // "지난 이력 보기" 토글 상태
+let _watch2TrackerCollapsed = true; // 이력 표 자체를 접어둘지 — 148건짜리 표가 종목 카드를 아래로 밀어내는 걸 막기 위해 기본 접힘
 
 function toggleWatch2TrackerShowAll() {
   _watch2TrackerShowAll = !_watch2TrackerShowAll;
+  renderWatch2TrackerHistory();
+}
+
+function toggleWatch2TrackerCollapsed() {
+  _watch2TrackerCollapsed = !_watch2TrackerCollapsed;
   renderWatch2TrackerHistory();
 }
 
@@ -5032,10 +5069,12 @@ function renderWatch2TrackerHistory() {
   section.style.display = '';
   section.innerHTML = `
     <div class="card" style="margin-bottom:0">
-      <div class="card-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="card-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none" onclick="toggleWatch2TrackerCollapsed()">
+        <span style="font-size:11px;color:var(--muted);width:12px;display:inline-block">${_watch2TrackerCollapsed ? '▶' : '▼'}</span>
         <span>📊 최근 2주 핵심관찰 이력</span>
         <span style="font-size:11px;font-weight:600;color:${badgeColor}">📁 ${sizeKB}KB · ${data.count||records.length}건</span>
       </div>
+      ${_watch2TrackerCollapsed ? '' : `
       <div style="overflow-x:auto;margin-top:8px">
         <table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
           <thead>
@@ -5059,7 +5098,7 @@ function renderWatch2TrackerHistory() {
           <button class="btn btn-sm" onclick="toggleWatch2TrackerShowAll()">
             ${_watch2TrackerShowAll ? '지난 이력 접기' : `지난 이력 보기 (${hiddenCount}건 숨김)`}
           </button>
-        </div>` : ''}
+        </div>` : ''}`}
     </div>`;
 }
 
